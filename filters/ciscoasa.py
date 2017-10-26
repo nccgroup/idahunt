@@ -76,20 +76,29 @@ def digitsonly2normalized(v):
 def normalize2digitsonly(version):
     return version.replace(".", "")
 
+
+# XXX - This is a direct copy from asadbg/helper.py. It should be all in the
+# same place eventually
 # parse the version from the firmware name
 # examples: asa811-smp-k8.bin, asa825-k8.bin, asa805-31-k8.bin
 def build_version(dirname):
 
     version = ''
     if "asav" in dirname:
-        match = re.search(r'asav(.*)\.qcow2', dirname)
+        match = re.search(r'asav([^\\/.]+)\.qcow2', dirname)
+        if not match:
+            logmsg("Could not find the asavXXX.qcow2 in string: %s" % dirname)
+            return ''
     elif "SPA" in dirname:
-        match = re.search(r'asa(.*)\.SPA', dirname)
+        match = re.search(r'asa([^\\/.]+)\.SPA', dirname)
+        if not match:
+            logmsg("Could not find the asaXXX.SPA in string: %s" % dirname)
+            return ''
     else:
-        match = re.search(r'asa(.*)\.bin', dirname)
-    if not match:
-        print("Could not find the asaXXX in directory name: %s" % dirname)
-        return version
+        match = re.search(r'asa([^\\/.]+)\.bin', dirname)
+        if not match:
+            logmsg("Could not find the asaXXX.bin in string: %s" % dirname)
+            return ''
 
     verName = match.group(1)
     elts = verName.split("-")
@@ -109,7 +118,7 @@ def build_version(dirname):
         pass
 
     return version
-    
+
 # do we actually treat it?
 def filter(f, min, max, arch, verbose=True):
     if os.path.basename(f) != "lina":
@@ -146,7 +155,7 @@ def filter(f, min, max, arch, verbose=True):
 def main(f, cmdline):
     # We override sys.argv so argparse can parse our arguments :)
     sys.argv = cmdline.split()
-    
+
     parser = argparse.ArgumentParser(prog=cmdline)
     parser.add_argument('-m', dest='minimum', default=None, help='Minimum \
                         version to include in the analysis \
@@ -160,5 +169,5 @@ def main(f, cmdline):
     parser.add_argument('-v', dest='verbose', default=False, action='store_true'
                         , help='be more verbose to debug script')
     args = parser.parse_args()
-    
+
     return filter(f, args.minimum, args.maximum, args.arch, args.verbose)

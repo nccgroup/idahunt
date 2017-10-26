@@ -193,7 +193,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--inputdir', dest='inputdir', default=None,
                         help='Input folder to search for files')
-    parser.add_argument('--analyse', dest='analyse', default=False,
+    parser.add_argument('--analyse', '--analyze', dest='analyse', default=False,
                         action='store_true', help='analyse all files \
                         i.e. create .idb for all of them')
     parser.add_argument('--open', dest='open', default=False, action='store_true',
@@ -202,7 +202,8 @@ if __name__ == "__main__":
                         help='List of IDA Python scripts to execute in this order')
     parser.add_argument('--filter', dest='filter', default=None,
                         help='External python script with optional arguments \
-                        defining a filter for the names of the files to analyse')
+                        defining a filter for the names of the files to \
+                        analyse. See filters/names.py for example')
     parser.add_argument('--cleanup', dest='cleanup', default=False,
                         action='store_true', help='Cleanup i.e. remove .asm \
                         files that we don\'t need')
@@ -221,20 +222,57 @@ if __name__ == "__main__":
     if args.list_only:
         logmsg("Simulating only...")
 
+    ida32_found = False
     try:
         IDA32 = os.environ["IDA32"]
+        ida32_found = True
     except:
         if os.name == "posix":
-            IDA32 = subprocess.check_output("which idaq", shell=True).rstrip(b'\n').decode('utf-8')
+            try:
+                IDA32 = subprocess.check_output("which idaq", shell=True).rstrip(b'\n').decode('utf-8')
+                ida32_found = True
+            except subprocess.CalledProcessError:
+                pass
+            if not ida32_found:
+                try:
+                    # IDA 7 switched binary names
+                    IDA32 = subprocess.check_output("which ida", shell=True).rstrip(b'\n').decode('utf-8')
+                    ida32_found = True
+                except subprocess.CalledProcessError:
+                    pass
         else:
             IDA32="C:\\Program Files (x86)\\IDA 6.95\\idaq.exe"
+            # XXX - Test the file exists here... We shouldn't rely on a version
+            ida32_found = True
+
+    ida64_found = False
     try:
         IDA64 = os.environ["IDA64"]
+        ida64_found = True
     except:
         if os.name == "posix":
-            IDA64 = subprocess.check_output("which idaq64", shell=True).rstrip(b'\n').decode('utf-8')
+            try:
+                IDA64 = subprocess.check_output("which idaq64", shell=True).rstrip(b'\n').decode('utf-8')
+                ida64_found = True
+            except subprocess.CalledProcessError:
+                pass
+            if not ida64_found:
+                try:
+                    # IDA 7 switched binary names
+                    IDA64 = subprocess.check_output("which ida64", shell=True).rstrip(b'\n').decode('utf-8')
+                    ida64_found = True
+                except subprocess.CalledProcessError:
+                    pass
         else:
             IDA64="C:\\Program Files (x86)\\IDA 6.95\\idaq64.exe"
+            # XXX - Test the file exists here... We shouldn't rely on a version
+            ida64_found = True
+
+    if not ida32_found or not ida64_found:
+        logmsg("You don't seem to have 32-bit and 64-bit ida installed? If you do specify the \
+                path in IDA32 and IDA64 environment variables, since we can't find them.")
+        sys.exit(1)
+
     if args.verbose:
         logmsg("IDA32 = %s" % IDA32)
         logmsg("IDA64 = %s" % IDA64)
@@ -246,6 +284,10 @@ if __name__ == "__main__":
     # NOTE: The order here is important. We do it this way so that you could do
     # clean the dir, create idbs, rename all the idbs, and then update a
     # database all in one run
+
+    if args.list_only and (not args.analyse and not args.scripts):
+        logmsg("ERROR: You must use --analyse or --scripts with --list-only")
+        sys.exit()
 
     if args.cleanup_temporary:
         delete_temporary_files(args.inputdir)
@@ -259,11 +301,14 @@ if __name__ == "__main__":
 
     if args.scripts:
         logmsg("EXECUTE SCRIPTS")
+        scripts = []
         for s in args.scripts:
             if not os.path.isabs(s):
-                logmsg("You need to provide an absolute path for the scripts as it will be executed in IDA Pro")
-                sys.exit()
-        for script in args.scripts:
+                logmsg("WARN: You didn't provide an absolute path for the scripts as it will be executed in IDA Pro")
+                logmsg("WARN: Using %s" % os.path.abspath(s))
+            scripts.append(os.path.abspath(s))
+
+        for script in scripts:
             do_dir(args.inputdir, args.filter, args.verbose, max_ida=args.max_ida,
                    do_file=exec_ida_python_script, script=script, list_only=args.list_only)
 

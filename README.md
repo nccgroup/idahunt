@@ -41,7 +41,8 @@ Python script or build your own. Some examples:
 # Usage
 
 * `idahunt.py`: main tool to analyse executable files
-* `filters/names.py`: contains a basic filter for name and/or extension
+* `filters/names.py`: contains a basic filter based on name and/or extension to
+                      decide which files in an input dir to analyze with ida
 * `script_template.py`: contains a `hello world` IDA Python script
 
 ```
@@ -60,7 +61,7 @@ optional arguments:
                         List of IDA Python scripts to execute in this order
   --filter FILTER       External python script with optional arguments
                         defining a filter for the names of the files to
-                        analyse
+                        analyse. See filters/names.py for example
   --cleanup             Cleanup i.e. remove .asm files that we don't need
   --temp-cleanup        Cleanup temporary database files i.e. remove .id0,
                         .id1, .id2, .nama files if IDA Pro crashed and did not
