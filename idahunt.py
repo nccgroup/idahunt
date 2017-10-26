@@ -162,7 +162,7 @@ def do_dir(inputdir, filter, verbose, max_ida, do_file, script=None, list_only=F
         logfile = f_noext + ".log"
         pid = do_file(ida_executable, f, logfile, idbfile, verbose, script=script, list_only=list_only)
         if pid != None:
-            pids.append(pid)
+            pids.append((pid, f))
         if pid == None:
             continue
         if max_ida == None or len(pids) < max_ida:
@@ -171,8 +171,11 @@ def do_dir(inputdir, filter, verbose, max_ida, do_file, script=None, list_only=F
         # Wait for all the IDA instances to complete
         while (len(pids) != 0):
             for p in pids:
-                if p.poll() != None:
+                if p[0].poll() != None:
                     pids.remove(p)
+                    if os.path.isfile(p[1] + ".id0"):
+                        logmsg("ERROR running %s on %s" % (script, p[1]), debug=True)
+
             logmsg("Waiting on %d IDA instances" % len(pids), end='\r')
             sys.stdout.flush()
             time.sleep(2)
@@ -181,8 +184,11 @@ def do_dir(inputdir, filter, verbose, max_ida, do_file, script=None, list_only=F
     # Wait for all remaining IDA instances to complete
     while (len(pids) != 0):
         for p in pids:
-            if p.poll() != None:
+            if p[0].poll() != None:
                 pids.remove(p)
+                if os.path.isfile(p[1] + ".id0"):
+                    logmsg("ERROR running %s on %s" % (script, p[1]), debug=True)
+
         logmsg("Waiting on remaining %d IDA instances" % len(pids), end='\r')
         sys.stdout.flush()
         time.sleep(5)
