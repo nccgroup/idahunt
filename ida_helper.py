@@ -41,6 +41,8 @@ def get_current_function(ea = ScreenEA()):
 # Gives the current function's address an address is part of
 def get_function_addr(ea = ScreenEA()):
     func = idaapi.get_func(ea)
+    if func == None:
+        return func
     return func.startEA
 
 # Renames an address with a name (and append a digit at the end if already 
@@ -48,6 +50,9 @@ def get_function_addr(ea = ScreenEA()):
 def rename_function(e, funcname):
     currname = funcname
     count = 1
+    if e == None:
+        print("[ida_helper] Error: can't rename Nonetype to %s" % funcname)
+        return False
     while not MakeName(e, currname):
         currname = "%s_%d" % (funcname, count)
         count += 1

@@ -126,6 +126,7 @@ def delete_asm_files(inputdir, list_only=False):
 # analyse_file is one of {analyse_file,open_file,exec_ida_python_script}
 def do_dir(inputdir, filter, verbose, max_ida, do_file, script=None, list_only=False):
     pids = []
+    call_count = 0
     for f in glob.iglob("%s/**" % inputdir, recursive=True):
         if os.path.isdir(f):
             continue
@@ -161,6 +162,7 @@ def do_dir(inputdir, filter, verbose, max_ida, do_file, script=None, list_only=F
 
         logfile = f_noext + ".log"
         pid = do_file(ida_executable, f, logfile, idbfile, verbose, script=script, list_only=list_only)
+        call_count += 1
         if pid != None:
             pids.append((pid, f))
         if pid == None:
@@ -192,7 +194,10 @@ def do_dir(inputdir, filter, verbose, max_ida, do_file, script=None, list_only=F
         logmsg("Waiting on remaining %d IDA instances" % len(pids), end='\r')
         sys.stdout.flush()
         time.sleep(5)
-    print("")
+    if call_count == 0:
+        logmsg("WARN: Didn't find any files to run script on")
+    else:
+        print("") # XXX - Why?
 
 if __name__ == "__main__":
 
