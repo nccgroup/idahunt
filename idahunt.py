@@ -327,6 +327,9 @@ if __name__ == "__main__":
             if not os.path.isabs(s):
                 logmsg("WARN: You didn't provide an absolute path for the scripts as it will be executed in IDA Pro")
                 logmsg("WARN: Using %s" % os.path.abspath(s))
+            if not os.path.exists(os.path.abspath(s)):
+                logmsg("ERROR: Script %s not not exist" % os.path.abspath(s))
+                sys.exit(1)
             scripts.append(os.path.abspath(s))
 
         for script in scripts:
