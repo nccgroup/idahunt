@@ -209,7 +209,7 @@ if __name__ == "__main__":
                         i.e. create .idb for all of them')
     parser.add_argument('--open', dest='open', default=False, action='store_true',
                         help='open all files into IDA (debug only)')
-    parser.add_argument('--scripts', dest='scripts', nargs="+",
+    parser.add_argument('--scripts', dest='scripts', nargs="+", default=None,
                         help='List of IDA Python scripts to execute in this order')
     parser.add_argument('--filter', dest='filter', default=None,
                         help='External python script with optional arguments \
@@ -229,6 +229,12 @@ if __name__ == "__main__":
     parser.add_argument('--list-only', dest='list_only', default=False, action="store_true",
                         help='List only what files would be handled without executing IDA')
     args = parser.parse_args()
+
+    if not args.analyse and not args.cleanup_temporary and \
+        not args.cleanup and args.scripts == None:
+        logmsg("ERROR: You didn't specify an action. Don't know what to do")
+        logmsg("ERROR: Try --analyse or --cleanup or --temp-cleanup or --scripts")
+        sys.exit(1)
 
     if args.list_only:
         logmsg("Simulating only...")
@@ -289,7 +295,11 @@ if __name__ == "__main__":
         logmsg("IDA64 = %s" % IDA64)
 
     if not args.inputdir:
-        logmsg("You need to provide an input directory with --inputdir")
+        logmsg("ERROR: You need to provide an input directory with --inputdir")
+        sys.exit()
+
+    if not os.path.exists(args.inputdir):
+        logmsg("ERROR: The path you provided doesn't exist: %s" % args.inputdir)
         sys.exit()
 
     # NOTE: The order here is important. We do it this way so that you could do
