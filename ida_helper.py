@@ -480,6 +480,8 @@ def get_idb_name():
     idbname = os.path.basename(idbpath)
     if idbname.endswith(".idb"):
         return idbname[:-4]
+    if idbname.endswith(".i64"):
+        return idbname[:-4]
     return idbname
 
 print("[ida_helper] loaded")

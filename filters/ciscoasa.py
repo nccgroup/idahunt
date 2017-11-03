@@ -120,9 +120,12 @@ def build_version(dirname):
     return version
 
 # do we actually treat it?
-def filter(f, min, max, arch, verbose=True):
-    if os.path.basename(f) != "lina":
-        #logmsg("Skipping non lina file: %s" % os.path.basename(f))
+def filter(f, min, max, arch, name, verbose):
+    if os.path.basename(f) != "lina" and os.path.basename(f) != "lina_monitor":
+        #logmsg("Skipping non lina/lina_monitor file: %s" % os.path.basename(f))
+        return None
+    if name and name != os.path.basename(f):
+        logmsg("Skipping wrong filename: %s" % f, debug=verbose)
         return None
     asaver = normalize2digitsonly(build_version(f))
     if asaver == None or len(asaver) == 0:
@@ -166,8 +169,11 @@ def main(f, cmdline):
     parser.add_argument('-a', dest='arch', default=None, help='Restrict to \
                         one architecture only ("32" for 32-bit, "64" for 64-bit,\
                         "asav" for ASAv firmware)')
+    parser.add_argument('-n', dest='name', default=None, help='Restrict to \
+                        a given name (lina, lina_monitor)')
     parser.add_argument('-v', dest='verbose', default=False, action='store_true'
                         , help='be more verbose to debug script')
     args = parser.parse_args()
 
-    return filter(f, args.minimum, args.maximum, args.arch, args.verbose)
+    return filter(f, args.minimum, args.maximum, args.arch, args.name,
+                  args.verbose)
