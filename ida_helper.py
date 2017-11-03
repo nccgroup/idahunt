@@ -59,6 +59,7 @@ def rename_function(e, funcname):
         if count > 100:
             print("[ida_helper] Error: rename_function looped too much for 0x%d -> %s" % (e, funcname))
             return False
+    return True
 
 # Remove name for a function (most likely to have sub_XXXXXXXX back after that)
 def unname_function(e):
@@ -472,5 +473,13 @@ def find_ret_block(addr):
 
 def get_bss_end(void):
     return idaapi.get_segm_by_name(".bss").endEA
+
+# Return the current idb name (without the .idb extension)
+def get_idb_name():
+    idbpath = GetIdbPath()
+    idbname = os.path.basename(idbpath)
+    if idbname.endswith(".idb"):
+        return idbname[:-4]
+    return idbname
 
 print("[ida_helper] loaded")
