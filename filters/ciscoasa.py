@@ -87,6 +87,7 @@ def build_version(dirname):
     if "asav" in dirname:
         match = re.search(r'asav([^\\/.]+)\.qcow2', dirname)
         if not match:
+            # XXX - This is noisy and would be nice to remove eventually
             logmsg("Could not find the asavXXX.qcow2 in string: %s" % dirname)
             return ''
     elif "SPA" in dirname:
@@ -121,9 +122,11 @@ def build_version(dirname):
 
 # do we actually treat it?
 def filter(f, min, max, arch, name, verbose):
-    if os.path.basename(f) != "lina" and os.path.basename(f) != "lina_monitor":
-        #logmsg("Skipping non lina/lina_monitor file: %s" % os.path.basename(f))
+    files = ["lina", "lina_monitor", "libc.so.6"]
+    if os.path.basename(f) not in files:
+        #logmsg("Skipping unrecognized file: %s" % os.path.basename(f))
         return None
+    # XXX - why do we do both above and below checks? just below should do?
     if name and name != os.path.basename(f):
         logmsg("Skipping wrong filename: %s" % f, debug=verbose)
         return None

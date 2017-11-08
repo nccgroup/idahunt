@@ -100,6 +100,15 @@ def addr_is_in_one_segment(addr, seg_info):
             return True
     return False
 
+def NameToRVA(s):
+    addr = LocByName(s)
+    if addr == ERROR_MINUS_1:
+        print("[ida_helper] Error: NameToRVA: Failed to find '%s' symbol" % s)
+        return None
+    print("[ida_helper] image base 0x%x" % idaapi.get_imagebase())
+    return addr - idaapi.get_imagebase()
+
+
 # Returns the address of any name: function, label, global, etc.
 def MyLocByName(s):
     addr = LocByName(s)

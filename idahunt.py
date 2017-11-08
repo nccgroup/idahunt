@@ -45,7 +45,8 @@ def analyse_file(ida_executable, infile, logfile, idbfile, verbose, script=None,
         logmsg("Skipping existing id0 %s. Close IDB first." % (infile + ".id0"), debug=verbose)
         return None
     logmsg("Analysing %s" % infile)
-    cmd = [ida_executable, "-B", "-L%s"% logfile, infile]
+    # We use -o below to gracefully handle symlinks
+    cmd = [ida_executable, "-B", "-o%s" % idbfile, "-L%s"% logfile, infile]
     if verbose:
         logmsg("%s" % " ".join(cmd))
     shell=True
