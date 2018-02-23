@@ -76,7 +76,7 @@ def get_segments_info():
     seg_names = [".init", ".plt", ".text", ".fini", ".rodata", ".eh_frame_hdr",
                  "eh_frame", ".gcc_except_table", ".tdata", ".ctors", ".dtors",
                  ".jcr", ".got", ".got.plt", ".data", "freq_data_section",
-                 ".bss", "extern", "abs"]
+                 ".bss", "extern", "abs", ".rdata"]
     res = {}
     for name in seg_names:
         seg = idaapi.get_segm_by_name(name)
@@ -231,6 +231,37 @@ def get_call_arguments_1(e = ScreenEA(), count_max = 10):
         e = PrevHead(e)
         count += 1
     return args
+    
+# see get_call_arguments_1
+def get_call_arguments_3(e = ScreenEA(), count_max = 5):
+    args = {}
+
+    # are we a call instruction?
+    mnem = GetMnem(e)
+    if mnem != "call" and mnem != "jmp":
+        print("[ida_helper] Error: not a call instruction at 0x%x" % e)
+        return None
+
+    # Parse something like:
+    # push    offset aSshPacketSocke ; "ssh_packet_socket_callback"
+    # push    2
+    # push    esi
+    # call    log
+    args_tmp = []
+    # parse arguments, parsing instructions backwards
+    e = PrevHead(e)
+    count = 0
+    # we only supports 10 instructions backwards looking for arguments
+    while count <= count_max:
+        #print("[ida_helper] '%s'" % GetDisasm(e))
+        # arguments are pushed in reverse order so we get the last arg first
+        if "push " in GetDisasm(e):
+            args_tmp.append(GetOperandValue(e,0))
+        e = PrevHead(e)
+        count += 1
+    for i in range(len(args_tmp)):
+        args[i] = args_tmp[i]
+    return args
 
 # Alternative to get_call_arguments_1(). See get_call_arguments_1() for more
 # information.
@@ -343,6 +374,8 @@ def get_call_arguments(e = ScreenEA(), count_max = 10):
         args = get_call_arguments_1(e, count_max)
         if not args:
             args = get_call_arguments_2(e, count_max)
+        if not args:
+            args = get_call_arguments_3(e, count_max)
     else:
         args = get_call_arguments_x64(e, count_max)
     return args
