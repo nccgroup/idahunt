@@ -198,7 +198,7 @@ def do_dir(inputdir, filter, verbose, max_ida, do_file, script=None, list_only=F
     if call_count == 0:
         logmsg("WARN: Didn't find any files to run script on")
     else:
-        print("") # XXX - Why?
+        logmsg("Executed IDA %d times" % call_count)
 
 if __name__ == "__main__":
 
@@ -225,7 +225,7 @@ if __name__ == "__main__":
                         .nam, .dmp files if IDA Pro crashed and did not delete them')
     parser.add_argument('--verbose', dest='verbose', default=False, action='store_true',
                         help='be more verbose to debug script')
-    parser.add_argument('--max-ida', dest='max_ida', default=10,
+    parser.add_argument('--max-ida', dest='max_ida', default=10, type=int,
                         help='Maximum number of instances of IDA to run at a time (default: 10)')
     parser.add_argument('--list-only', dest='list_only', default=False, action="store_true",
                         help='List only what files would be handled without executing IDA')
@@ -259,7 +259,8 @@ if __name__ == "__main__":
                 except subprocess.CalledProcessError:
                     pass
         else:
-            IDA32="C:\\Program Files (x86)\\IDA 6.95\\idaq.exe"
+            #IDA32="C:\\Program Files (x86)\\IDA 6.95\\idaq.exe"
+            IDA32="C:\\Program Files\\IDA 7.1\\ida.exe"
             # XXX - Test the file exists here... We shouldn't rely on a version
             ida32_found = True
 
@@ -282,7 +283,8 @@ if __name__ == "__main__":
                 except subprocess.CalledProcessError:
                     pass
         else:
-            IDA64="C:\\Program Files (x86)\\IDA 6.95\\idaq64.exe"
+            #IDA64="C:\\Program Files (x86)\\IDA 6.95\\idaq64.exe"
+            IDA64="C:\\Program Files\\IDA 7.1\\ida64.exe"
             # XXX - Test the file exists here... We shouldn't rely on a version
             ida64_found = True
 
