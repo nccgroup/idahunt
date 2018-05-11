@@ -187,13 +187,56 @@ def find_gadget(byteStr):
         print("[ida_helper] Error: Could not find gadget in .text")
         return None
 
+# helper for get_call_arguments()-like for when we get a register instead of a useful
+# value as an argument, so we can retrieve what the register value is.
+# e.g.
+# .text:08380F8D   mov     eax, offset aAdmin_quick_ha ; "admin_quick_handoff"
+# .text:08380F92   mov     [esp+20h], edi
+# .text:08380F96   mov     [esp+1Ch], ecx
+# .text:08380F9A   mov     [esp+18h], edx
+# .text:08380F9E   mov     [esp+4], eax
+# .text:08380FA2   mov     dword ptr [esp], offset aUnicorn_admi_0 ; "unicorn_admin_server.c"
+# .text:08380FA9   call    unicorn_log_impl
+# assuming we are on instruction at 08380F9E, we want to resolve what eax is i.e. 0x0921BA08
+# .rodata:0921BA08 aAdmin_quick_ha db 'admin_quick_handoff',0 
+def get_register_value(e=ScreenEA(), register=None, count_max=20):
+
+    reg = GetOpnd(e, 1)
+    if register != reg:
+        print("[ida_helper] Error: bad register at 0x%x" % e)
+        return None
+
+    arg_instructions = ["mov     %s", 
+                        "lea     %s"]
+
+    e = PrevHead(e)
+    count = 0
+    while count <= count_max:
+        #print("[ida_helper] '%s'" % GetDisasm(e))
+        for i in range(len(arg_instructions)):
+            ins = arg_instructions[i] % register
+            #print("[ida_helper] '%s'" % ins)
+            if ins in GetDisasm(e):
+                # First arrive, first serve
+                # We suppose that the instruction closest is the 
+                # one giving the register value.
+                # If we encounter another instruction initializing
+                # the register later, we ignore it
+                val = GetOperandValue(e,1)
+                #print("[ida_helper] Found register value %s: 0x%x" % (register, val))
+                return val
+        e = PrevHead(e)
+        count += 1
+    #print("[ida_helper] Could not find register value")
+    return None
+
 # For a given address, check instructions above looking for potential arguments
 # and save this into a dictionary.
 # It only works on x86 architecture.
 # E.g.: this can be used on some logging functions where one of the argument
 #       passed to the logging function contains the caller's function name
 #       This allows renaming the caller's function automatically
-def get_call_arguments_1(e = ScreenEA(), count_max = 10):
+def get_call_arguments_1(e=ScreenEA(), count_max=10):
     args = {}
 
     # are we a call instruction?
@@ -205,12 +248,25 @@ def get_call_arguments_1(e = ScreenEA(), count_max = 10):
     # we hardcode the instructions that we are looking for i.e. we don't look 
     # for anything else that +4, +8, etc.
     # i.e we don't support yet case where the offset to esp is renamed by IDA
+    
+    # direct offset
+    # e.g. "mov     dword ptr [esp], offset aUnicorn_admi_0"
     arg_instructions = ["mov     dword ptr [esp]", 
                         "mov     dword ptr [esp+4]", 
                         "mov     dword ptr [esp+8]",
                         "mov     dword ptr [esp+0Ch]", 
                         "mov     dword ptr [esp+10h]", 
                         "mov     dword ptr [esp+14h]"]
+
+    # register so will need an extra step to resolve...
+    # e.g. "mov     [esp+4], eax"
+    arg_instructions_2 = ["mov     [esp]", 
+                          "mov     [esp+4]", 
+                          "mov     [esp+8]",
+                          "mov     [esp+0Ch]", 
+                          "mov     [esp+10h]", 
+                          "mov     [esp+14h]"]
+
     # parse arguments, parsing instructions backwards
     e = PrevHead(e)
     count = 0
@@ -228,6 +284,16 @@ def get_call_arguments_1(e = ScreenEA(), count_max = 10):
                 if i not in args.keys():
                     args[i] = GetOperandValue(e,1)
                     #print("[ida_helper] Found argument %d: 0x%x" % (i, args[i]))
+        for i in range(len(arg_instructions_2)):
+            #print("[ida_helper] '%s' (2)" % arg_instructions[i])
+            if arg_instructions_2[i] in GetDisasm(e):
+                if i not in args.keys():
+                    register = GetOpnd(e, 1)
+                    #print("[ida_helper] Found argument based on register for %d: %s" % (i, register))
+                    value = get_register_value(e, register)
+                    if value != None:
+                        args[i] = value
+                        #print("[ida_helper] Found argument %d: %s (2)" % (i, args[i]))
         e = PrevHead(e)
         count += 1
     return args
@@ -369,7 +435,7 @@ def get_call_arguments_x64(e = ScreenEA(), count_max = 10):
 
 # Wrapper to have a generic method to get arguments for a function call
 # based on internal helpers.
-def get_call_arguments(e = ScreenEA(), count_max = 10):
+def get_call_arguments(e=ScreenEA(), count_max=10):
     if ARCHITECTURE == 32:
         args = get_call_arguments_1(e, count_max)
         if not args:
@@ -527,3 +593,7 @@ def get_idb_name():
     return idbname
 
 print("[ida_helper] loaded")
+
+if __name__ == "__main__":
+    args = get_call_arguments(e=ScreenEA())
+    print(args)
