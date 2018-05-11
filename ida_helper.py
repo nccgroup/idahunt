@@ -237,6 +237,14 @@ def get_register_value(e=ScreenEA(), register=None, count_max=20):
 #       passed to the logging function contains the caller's function name
 #       This allows renaming the caller's function automatically
 def get_call_arguments_1(e=ScreenEA(), count_max=10):
+    return get_structure_offsets(e=e, count_max=count_max, reg="esp")
+
+# Works on both 32-bit and 64-bit
+# depending on the reg we provide ("rdx", "edx", etc.)
+#
+# It is generally useful when reg="esp" but we also support parsing from
+# other registers in case a structure is filled
+def get_structure_offsets(e=ScreenEA(), count_max=10, reg="esp"):
     args = {}
 
     # are we a call instruction?
@@ -251,21 +259,25 @@ def get_call_arguments_1(e=ScreenEA(), count_max=10):
     
     # direct offset
     # e.g. "mov     dword ptr [esp], offset aUnicorn_admi_0"
-    arg_instructions = ["mov     dword ptr [esp]", 
-                        "mov     dword ptr [esp+4]", 
-                        "mov     dword ptr [esp+8]",
-                        "mov     dword ptr [esp+0Ch]", 
-                        "mov     dword ptr [esp+10h]", 
-                        "mov     dword ptr [esp+14h]"]
+    arg_instructions = ["mov     dword ptr [%s]" % reg, 
+                        "mov     dword ptr [%s+4]" % reg, 
+                        "mov     dword ptr [%s+8]" % reg,
+                        "mov     dword ptr [%s+0Ch]" % reg, 
+                        "mov     dword ptr [%s+10h]" % reg, 
+                        "mov     dword ptr [%s+14h]" % reg,
+                        "mov     dword ptr [%s+18h]" % reg,
+                        "mov     dword ptr [%s+1Ch]" % reg]
 
     # register so will need an extra step to resolve...
     # e.g. "mov     [esp+4], eax"
-    arg_instructions_2 = ["mov     [esp]", 
-                          "mov     [esp+4]", 
-                          "mov     [esp+8]",
-                          "mov     [esp+0Ch]", 
-                          "mov     [esp+10h]", 
-                          "mov     [esp+14h]"]
+    arg_instructions_2 = ["mov     [%s]" % reg, 
+                          "mov     [%s+4]" % reg, 
+                          "mov     [%s+8]" % reg,
+                          "mov     [%s+0Ch]" % reg, 
+                          "mov     [%s+10h]" % reg, 
+                          "mov     [%s+14h]" % reg,
+                          "mov     [%s+18h]" % reg,
+                          "mov     [%s+1Ch]" % reg]
 
     # parse arguments, parsing instructions backwards
     e = PrevHead(e)
