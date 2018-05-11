@@ -37,13 +37,15 @@ def path_to_module_string(p):
     return p.replace("/", ".").replace("\\", ".")
 
 # Does the initial auto-analysis when we first open a file in IDA
+# Returns False if does not do anything, the subprocess if it was created
+# of True if it was listing only.
 def analyse_file(ida_executable, infile, logfile, idbfile, verbose, script=None, list_only=False):
     if os.path.isfile(idbfile):
         logmsg("Skipping existing IDB %s. Analysis has already been made" % idbfile, debug=verbose)
-        return None
+        return False
     if os.path.isfile(infile + ".id0"):
         logmsg("Skipping existing id0 %s. Close IDB first." % (infile + ".id0"), debug=verbose)
-        return None
+        return False
     logmsg("Analysing %s" % infile)
     # We use -o below to gracefully handle symlinks
     cmd = [ida_executable, "-B", "-o%s" % idbfile, "-L%s"% logfile, infile]
@@ -56,16 +58,18 @@ def analyse_file(ida_executable, infile, logfile, idbfile, verbose, script=None,
     if not list_only:
         return subprocess.Popen(cmd, shell)
     else:
-        return None
+        return True
 
 # Re-open an existing IDB
+# Returns False if does not do anything, the subprocess if it was created
+# of True if it was listing only.
 def open_file(ida_executable, infile, logfile, idbfile, verbose, script=None, list_only=False):
     if not os.path.isfile(idbfile):
         logmsg("Skipping no existing IDB %s. Execute --analyse first." % idbfile, debug=verbose)
-        return None
+        return False
     if os.path.isfile(infile + ".id0"):
         logmsg("Skipping existing id0 %s. Close IDB first." % (infile + ".id0"), debug=verbose)
-        return None
+        return False
     logmsg("Opening %s" % infile)
     cmd = [ida_executable, idbfile]
     if verbose:
@@ -77,19 +81,21 @@ def open_file(ida_executable, infile, logfile, idbfile, verbose, script=None, li
         subprocess.Popen(cmd, shell)
     # We don't want to wait that it gets closed since it will be a manual
     # operation from the user anyway
-    return None
+    return True
 
 # Re-open an existing IDB and execute an IDA Python script before leaving
+# Returns False if does not do anything, the subprocess if it was created
+# of True if it was listing only.
 def exec_ida_python_script(ida_executable, infile, logfile, idbfile, verbose, script=None, list_only=False):
     if not script:
         logmsg("Skipping because no script provided. Need a script to execute it in IDA", debug=verbose)
-        return None
+        return False
     if not os.path.isfile(idbfile):
         logmsg("Skipping no existing IDB %s. Execute --analyse first." % idbfile, debug=verbose)
-        return None
+        return False
     if os.path.isfile(infile + ".id0"):
         logmsg("Skipping existing id0 %s. Close IDB first." % (infile + ".id0"), debug=verbose)
-        return None
+        return False
     logmsg("Executing script %s for %s" % (script, infile))
     # open IDA but at least does not display message boxes to the user.
     cmd = [ida_executable, "-A", "-S%s" % script, "-L%s" % logfile, idbfile]
@@ -105,7 +111,7 @@ def exec_ida_python_script(ida_executable, infile, logfile, idbfile, verbose, sc
     if not list_only:
         return subprocess.Popen(cmd, shell, env=d)
     else:
-        return None
+        return True
 
 # Useful if IDB failed to close correctly. Do not use if IDA Pro is still opened!
 def delete_temporary_files(inputdir, list_only=False):
@@ -128,6 +134,7 @@ def delete_asm_files(inputdir, list_only=False):
 def do_dir(inputdir, filter, verbose, max_ida, do_file, script=None, list_only=False):
     pids = []
     call_count = 0
+    exec_count = 0
     for f in glob.iglob("%s/**" % inputdir, recursive=True):
         if os.path.isdir(f):
             continue
@@ -163,10 +170,13 @@ def do_dir(inputdir, filter, verbose, max_ida, do_file, script=None, list_only=F
 
         logfile = f_noext + ".log"
         pid = do_file(ida_executable, f, logfile, idbfile, verbose, script=script, list_only=list_only)
-        call_count += 1
-        if pid != None:
+        # we check if pid is a real PID or if it returned True (list only)
+        if pid != False:
+            call_count += 1
+        if type(pid) != bool:
+            exec_count += 1
             pids.append((pid, f))
-        if pid == None:
+        if type(pid) == bool:
             continue
         if max_ida == None or len(pids) < max_ida:
             continue
@@ -198,7 +208,14 @@ def do_dir(inputdir, filter, verbose, max_ida, do_file, script=None, list_only=F
     if call_count == 0:
         logmsg("WARN: Didn't find any files to run script on")
     else:
-        logmsg("Executed IDA %d times" % call_count)
+        logmsg("Executed IDA %d/%d times" % (exec_count, call_count))
+
+# https://arcpy.wordpress.com/2012/04/20/146/
+def hms_string(sec_elapsed):
+    h = int(sec_elapsed / (60 * 60))
+    m = int((sec_elapsed % (60 * 60)) / 60)
+    s = sec_elapsed % 60.
+    return "{}:{:>02}:{:>05.2f}".format(h, m, s)
 
 if __name__ == "__main__":
 
@@ -309,14 +326,18 @@ if __name__ == "__main__":
     # clean the dir, create idbs, rename all the idbs, and then update a
     # database all in one run
 
-    if args.list_only and (not args.analyse and not args.scripts):
-        logmsg("ERROR: You must use --analyse or --scripts with --list-only")
+    if args.list_only and (not args.analyse and not args.scripts and not args.cleanup and not args.cleanup_temporary):
+        logmsg("ERROR: You must use --cleanup, --analyse or --scripts with --list-only")
         sys.exit()
 
+    start_time = time.time()
+
     if args.cleanup_temporary:
-        delete_temporary_files(args.inputdir)
+        logmsg("CLEANUP TEMP FILES")
+        delete_temporary_files(args.inputdir, list_only=args.list_only)
     if args.cleanup:
-        delete_asm_files(args.inputdir)
+        logmsg("CLEANUP ASM FILES")
+        delete_asm_files(args.inputdir, list_only=args.list_only)
 
     if args.analyse:
         logmsg("ANALYSING FILES")
@@ -344,3 +365,6 @@ if __name__ == "__main__":
         do_dir(args.inputdir, args.filter, args.verbose, max_ida=None,
                do_file=open_file, list_only=args.list_only)
         sys.exit()
+
+    end_time = time.time()
+    logmsg("Took {} to execute this".format(hms_string(end_time - start_time)))
