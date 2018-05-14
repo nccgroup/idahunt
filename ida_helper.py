@@ -201,12 +201,13 @@ def find_gadget(byteStr):
 # .rodata:0921BA08 aAdmin_quick_ha db 'admin_quick_handoff',0 
 def get_register_value(e=ScreenEA(), register=None, count_max=20):
 
-    reg = GetOpnd(e, 1)
+    reg = print_operand(e, 1)
     if register != reg:
         print("[ida_helper] Error: bad register at 0x%x" % e)
         return None
 
     arg_instructions = ["mov     %s", 
+                        "movsxd  %s", 
                         "lea     %s"]
 
     e = PrevHead(e)
@@ -215,16 +216,21 @@ def get_register_value(e=ScreenEA(), register=None, count_max=20):
         #print("[ida_helper] '%s'" % GetDisasm(e))
         for i in range(len(arg_instructions)):
             ins = arg_instructions[i] % register
-            #print("[ida_helper] '%s'" % ins)
             if ins in GetDisasm(e):
+                #print("[ida_helper] 0x%x - Matches '%s'" % (e, ins))
                 # First arrive, first serve
                 # We suppose that the instruction closest is the 
                 # one giving the register value.
                 # If we encounter another instruction initializing
                 # the register later, we ignore it
-                val = GetOperandValue(e,1)
-                #print("[ida_helper] Found register value %s: 0x%x" % (register, val))
-                return val
+                # XXX: if a different register is used, it may give weird result
+                # mov     rax, cs:off_46141C0       -> accepted
+                # movsxd  rax, dword ptr [rax]      -> rejected
+                # mov     [rdx+18h], rax
+                if get_operand_type(e, 1) == o_mem:
+                    val = get_operand_value(e, 1)
+                    #print("[ida_helper] Found register value %s: 0x%x" % (register, val))
+                    return val
         e = PrevHead(e)
         count += 1
     #print("[ida_helper] Could not find register value")
@@ -248,7 +254,7 @@ def get_structure_offsets(e=ScreenEA(), count_max=10, reg="esp"):
     args = {}
 
     # are we a call instruction?
-    mnem = GetMnem(e)
+    mnem = print_insn_mnem(e)
     if mnem != "call" and mnem != "jmp":
         print("[ida_helper] Error: not a call instruction at 0x%x" % e)
         return None
@@ -267,10 +273,18 @@ def get_structure_offsets(e=ScreenEA(), count_max=10, reg="esp"):
                         "mov     dword ptr [%s+14h]" % reg,
                         "mov     dword ptr [%s+18h]" % reg,
                         "mov     dword ptr [%s+1Ch]" % reg]
+    arg_instructions_2 = ["mov     qword ptr [%s]" % reg, 
+                        "mov     qword ptr [%s+4]" % reg, 
+                        "mov     qword ptr [%s+8]" % reg,
+                        "mov     qword ptr [%s+0Ch]" % reg, 
+                        "mov     qword ptr [%s+10h]" % reg, 
+                        "mov     qword ptr [%s+14h]" % reg,
+                        "mov     qword ptr [%s+18h]" % reg,
+                        "mov     qword ptr [%s+1Ch]" % reg]
 
     # register so will need an extra step to resolve...
     # e.g. "mov     [esp+4], eax"
-    arg_instructions_2 = ["mov     [%s]" % reg, 
+    arg_instructions_3 = ["mov     [%s]" % reg, 
                           "mov     [%s+4]" % reg, 
                           "mov     [%s+8]" % reg,
                           "mov     [%s+0Ch]" % reg, 
@@ -286,26 +300,32 @@ def get_structure_offsets(e=ScreenEA(), count_max=10, reg="esp"):
     while count <= count_max:
         #print("[ida_helper] '%s'" % GetDisasm(e))
         for i in range(len(arg_instructions)):
-            #print("[ida_helper] '%s'" % arg_instructions[i])
             if arg_instructions[i] in GetDisasm(e):
+                #print("[ida_helper] 0x%x - Matches '%s'" % (e, arg_instructions[i]))
                 # First arrive, first serve
                 # We suppose that the instruction closest to the call is the 
                 # one giving the argument.
                 # If we encounter another instruction with mov [esp+offset] 
                 # later with the same offset, we ignore it
                 if i not in args.keys():
-                    args[i] = GetOperandValue(e,1)
+                    args[i] = get_operand_value(e,1)
                     #print("[ida_helper] Found argument %d: 0x%x" % (i, args[i]))
         for i in range(len(arg_instructions_2)):
-            #print("[ida_helper] '%s' (2)" % arg_instructions[i])
             if arg_instructions_2[i] in GetDisasm(e):
+                #print("[ida_helper] Matches '%s'" % arg_instructions_2[i])
                 if i not in args.keys():
-                    register = GetOpnd(e, 1)
-                    #print("[ida_helper] Found argument based on register for %d: %s" % (i, register))
+                    args[i] = get_operand_value(e,1)
+                    #print("[ida_helper] Found argument %d: 0x%x (2)" % (i, args[i]))
+        for i in range(len(arg_instructions_3)):
+            if arg_instructions_3[i] in GetDisasm(e):
+                #print("[ida_helper] Matches '%s'" % arg_instructions_3[i])
+                if i not in args.keys():
+                    register = print_operand(e, 1)
+                    #print("[ida_helper] Argument %d based on register %s..." % (i, register))
                     value = get_register_value(e, register)
                     if value != None:
                         args[i] = value
-                        #print("[ida_helper] Found argument %d: %s (2)" % (i, args[i]))
+                        #print("[ida_helper] Found argument %d: 0x%x (3)" % (i, args[i]))
         e = PrevHead(e)
         count += 1
     return args
@@ -315,7 +335,7 @@ def get_call_arguments_3(e = ScreenEA(), count_max = 5):
     args = {}
 
     # are we a call instruction?
-    mnem = GetMnem(e)
+    mnem = print_insn_mnem(e)
     if mnem != "call" and mnem != "jmp":
         print("[ida_helper] Error: not a call instruction at 0x%x" % e)
         return None
@@ -334,7 +354,7 @@ def get_call_arguments_3(e = ScreenEA(), count_max = 5):
         #print("[ida_helper] '%s'" % GetDisasm(e))
         # arguments are pushed in reverse order so we get the last arg first
         if "push " in GetDisasm(e):
-            args_tmp.append(GetOperandValue(e,0))
+            args_tmp.append(get_operand_value(e,0))
         e = PrevHead(e)
         count += 1
     for i in range(len(args_tmp)):
@@ -347,7 +367,7 @@ def get_call_arguments_2(e = ScreenEA(), count_max = 10):
     args = {}
 
     # are we a call instruction?
-    mnem = GetMnem(e)
+    mnem = print_insn_mnem(e)
     if mnem != "call" and mnem != "jmp":
         print("[ida_helper] Error: not a call instruction at 0x%x" % e)
         return None
@@ -364,24 +384,24 @@ def get_call_arguments_2(e = ScreenEA(), count_max = 10):
         #print("[ida_helper] '%s'" % GetDisasm(e))
         if GetDisasm(e).startswith("mov     [esp"):
             # o_phrase = 3  # Memory Ref [Base Reg + Index Reg] phrase
-            if GetOpType(e,0) == o_phrase:
+            if get_operand_type(e,0) == o_phrase:
                 # unfortunately we can't test that there is no index register 
                 # so we ignore for now...
                 if 0 not in args.keys():
-                    args[0] = GetOperandValue(e,1)
+                    args[0] = get_operand_value(e,1)
             # o_displ = 4 # Memory Reg [Base Reg + Index Reg + Displacement] phrase+addr
-            if GetOpType(e,0) == o_displ:
+            if get_operand_type(e,0) == o_displ:
                 for i in range(len(args_offsets)):
                     if i == 0:
                         continue # handled by above case
-                    if GetOperandValue(e,0) == args_offsets[i]:
+                    if get_operand_value(e,0) == args_offsets[i]:
                         # First arrive, first serve
                         # We suppose that the instruction closest to the call 
                         # is the one giving the argument.
                         # If we encounter another instruction with mov [esp+offset] 
                         # later with the same offset, we ignore it
                         if i not in args.keys():
-                            args[i] = GetOperandValue(e,1)
+                            args[i] = get_operand_value(e,1)
                             #print("[ida_helper] Found argument %d: 0x%x" % (i, args[i]))
         e = PrevHead(e)
         count += 1
@@ -393,7 +413,7 @@ def get_call_arguments_x64(e = ScreenEA(), count_max = 10):
     args = {}
 
     # are we a call instruction?
-    mnem = GetMnem(e)
+    mnem = print_insn_mnem(e)
     if mnem != "call" and mnem != "jmp":
         print("[ida_helper] Error: not a call instruction at 0x%x" % e)
         return None
@@ -439,7 +459,7 @@ def get_call_arguments_x64(e = ScreenEA(), count_max = 10):
                 # We suppose that the instruction closest to the call is the one giving the argument.
                 # If we encounter another instruction with "mov reg" later with the same offset, we ignore it
                 if i not in args.keys():
-                    args[i] = GetOperandValue(e,1)
+                    args[i] = get_operand_value(e,1)
                     #print("[ida_helper] Found argument %d: 0x%x" % (i, args[i]))
         e = PrevHead(e)
         count += 1
