@@ -33,13 +33,23 @@ def logmsg(s, end=None, debug=True):
     else:
         print(s)
 
+# https://gist.github.com/polyvertex/b6d337fec7011a0f9292
+def iglob_hidden(*args, **kwargs):
+    """A glob.iglob that include dot files and hidden files"""
+    old_ishidden = glob._ishidden
+    glob._ishidden = lambda x: False
+    try:
+        yield from glob.iglob(*args, **kwargs)
+    finally:
+        glob._ishidden = old_ishidden
+
 def path_to_module_string(p):
     return p.replace("/", ".").replace("\\", ".")
 
 # Does the initial auto-analysis when we first open a file in IDA
 # Returns False if does not do anything, the subprocess if it was created
 # of True if it was listing only.
-def analyse_file(ida_executable, infile, logfile, idbfile, verbose, script=None, list_only=False):
+def analyse_file(ida_executable, infile, logfile, idbfile, verbose, ida_args=None, script=None, list_only=False):
     if os.path.isfile(idbfile):
         logmsg("Skipping existing IDB %s. Analysis has already been made" % idbfile, debug=verbose)
         return False
@@ -48,7 +58,10 @@ def analyse_file(ida_executable, infile, logfile, idbfile, verbose, script=None,
         return False
     logmsg("Analysing %s" % infile)
     # We use -o below to gracefully handle symlinks
-    cmd = [ida_executable, "-B", "-o%s" % idbfile, "-L%s"% logfile, infile]
+    if ida_args:
+        cmd = [ida_executable, "-B", "-o%s" % idbfile, "-L%s"% logfile] + ida_args + [infile]
+    else:
+        cmd = [ida_executable, "-B", "-o%s" % idbfile, "-L%s"% logfile, infile]
     if verbose:
         logmsg("%s" % " ".join(cmd))
     shell=True
@@ -63,7 +76,7 @@ def analyse_file(ida_executable, infile, logfile, idbfile, verbose, script=None,
 # Re-open an existing IDB
 # Returns False if does not do anything, the subprocess if it was created
 # of True if it was listing only.
-def open_file(ida_executable, infile, logfile, idbfile, verbose, script=None, list_only=False):
+def open_file(ida_executable, infile, logfile, idbfile, verbose, ida_args=None, script=None, list_only=False):
     if not os.path.isfile(idbfile):
         logmsg("Skipping no existing IDB %s. Execute --analyse first." % idbfile, debug=verbose)
         return False
@@ -86,7 +99,7 @@ def open_file(ida_executable, infile, logfile, idbfile, verbose, script=None, li
 # Re-open an existing IDB and execute an IDA Python script before leaving
 # Returns False if does not do anything, the subprocess if it was created
 # of True if it was listing only.
-def exec_ida_python_script(ida_executable, infile, logfile, idbfile, verbose, script=None, list_only=False):
+def exec_ida_python_script(ida_executable, infile, logfile, idbfile, verbose, ida_args=None, script=None, list_only=False):
     if not script:
         logmsg("Skipping because no script provided. Need a script to execute it in IDA", debug=verbose)
         return False
@@ -96,9 +109,26 @@ def exec_ida_python_script(ida_executable, infile, logfile, idbfile, verbose, sc
     if os.path.isfile(infile + ".id0"):
         logmsg("Skipping existing id0 %s. Close IDB first." % (infile + ".id0"), debug=verbose)
         return False
-    logmsg("Executing script %s for %s" % (script, infile))
+    # If we pass a relative script path from the command line, we try to guess the right path
+    # by either looking at the relative path from where idahunt.py is called or by looking at
+    # a relative path to the file we analyse is, i.e. where the .idb is
+    if not os.path.isabs(script):
+        logmsg("WARN: Trying to guess script relative path...")
+        abs_script = os.path.abspath(script)
+        if not os.path.exists(abs_script):
+            logmsg("WARN: Script %s does not exist" % abs_script)
+            abs_script = os.path.join(os.path.dirname(infile), script)
+            if not os.path.exists(abs_script):
+                logmsg("ERROR: Script %s does not exist" % abs_script)
+                return False
+    else:
+        abs_script = script
+    logmsg("Executing script %s for %s" % (abs_script, infile))
     # open IDA but at least does not display message boxes to the user.
-    cmd = [ida_executable, "-A", "-S%s" % script, "-L%s" % logfile, idbfile]
+    if ida_args:
+        cmd = [ida_executable, "-A", "-S%s" % abs_script, "-L%s" % logfile] + ida_args + [infile] # infile vs idbfile
+    else:
+        cmd = [ida_executable, "-A", "-S%s" % abs_script, "-L%s" % logfile, idbfile]
     if verbose:
         logmsg("%s" % " ".join(cmd))
     shell=True
@@ -115,7 +145,7 @@ def exec_ida_python_script(ida_executable, infile, logfile, idbfile, verbose, sc
 
 # Useful if IDB failed to close correctly. Do not use if IDA Pro is still opened!
 def delete_temporary_files(inputdir, list_only=False):
-    for f in glob.iglob("%s/**" % inputdir, recursive=True):
+    for f in iglob_hidden("%s/**" % inputdir, recursive=True):
         if f.endswith(".id0") or f.endswith(".id1") or f.endswith(".id2") or \
            f.endswith(".nam") or f.endswith(".til") or f.endswith(".dmp"):
             logmsg("Deleting %s" % f)
@@ -123,7 +153,7 @@ def delete_temporary_files(inputdir, list_only=False):
                 os.remove(f)
 
 def delete_asm_files(inputdir, list_only=False):
-    for f in glob.iglob("%s/**" % inputdir, recursive=True):
+    for f in iglob_hidden("%s/**" % inputdir, recursive=True):
         if f.endswith(".asm"):
             logmsg("Deleting %s" % f)
             if not list_only:
@@ -131,11 +161,11 @@ def delete_asm_files(inputdir, list_only=False):
 
 # main function handling an input folder
 # do_dir is one of {analyse_file,open_file,exec_ida_python_script}
-def do_dir(inputdir, filter, verbose, max_ida, do_file, script=None, list_only=False):
+def do_dir(inputdir, filter, verbose, max_ida, do_file, ida_args=None, script=None, list_only=False):
     pids = []
     call_count = 0
     exec_count = 0
-    for f in glob.iglob("%s/**" % inputdir, recursive=True):
+    for f in iglob_hidden("%s/**" % inputdir, recursive=True):
         if os.path.isdir(f):
             continue
         if f.endswith(".idb") or f.endswith(".i64") or \
@@ -169,7 +199,7 @@ def do_dir(inputdir, filter, verbose, max_ida, do_file, script=None, list_only=F
                 sys.exit()
 
         logfile = f_noext + ".log"
-        pid = do_file(ida_executable, f, logfile, idbfile, verbose, script=script, list_only=list_only)
+        pid = do_file(ida_executable, f, logfile, idbfile, verbose, ida_args=ida_args, script=script, list_only=list_only)
         # we check if pid is a real PID or if it returned True (list only)
         if pid != False:
             call_count += 1
@@ -227,6 +257,8 @@ if __name__ == "__main__":
                         i.e. create .idb for all of them')
     parser.add_argument('--open', dest='open', default=False, action='store_true',
                         help='open all files into IDA (debug only)')
+    parser.add_argument('--ida-args', dest='ida_args', default=None,
+                        help='Additional arguments to pass to IDA (e.g. -p<processor> -i<entry_point> -b<load_addr>)')
     parser.add_argument('--scripts', dest='scripts', nargs="+", default=None,
                         help='List of IDA Python scripts to execute in this order')
     parser.add_argument('--filter', dest='filter', default=None,
@@ -332,6 +364,12 @@ if __name__ == "__main__":
 
     start_time = time.time()
 
+    ida_args = None
+    if args.ida_args:
+        # lstrip() to allow having a space as first character (to avoid Python to parse our
+        # IDA arguments)
+        ida_args = args.ida_args.lstrip().split()
+
     if args.cleanup_temporary:
         logmsg("CLEANUP TEMP FILES")
         delete_temporary_files(args.inputdir, list_only=args.list_only)
@@ -342,28 +380,26 @@ if __name__ == "__main__":
     if args.analyse:
         logmsg("ANALYSING FILES")
         do_dir(args.inputdir, args.filter, args.verbose, max_ida=args.max_ida,
-               do_file=analyse_file, list_only=args.list_only)
+               do_file=analyse_file, list_only=args.list_only, ida_args=ida_args)
 
     if args.scripts:
         logmsg("EXECUTE SCRIPTS")
         scripts = []
         for s in args.scripts:
             if not os.path.isabs(s):
-                logmsg("WARN: You didn't provide an absolute path for the scripts as it will be executed in IDA Pro")
-                logmsg("WARN: Using %s" % os.path.abspath(s))
-            if not os.path.exists(os.path.abspath(s)):
-                logmsg("ERROR: Script %s not not exist" % os.path.abspath(s))
-                sys.exit(1)
-            scripts.append(os.path.abspath(s))
+                # Note: we will try to guess its relative path later in exec_ida_python_script()
+                logmsg("WARN: %s to be executed in IDA Pro, is not an absolute path" % s)
+            scripts.append(s)
 
         for script in scripts:
             do_dir(args.inputdir, args.filter, args.verbose, max_ida=args.max_ida,
-                   do_file=exec_ida_python_script, script=script, list_only=args.list_only)
+                   do_file=exec_ida_python_script, script=script, list_only=args.list_only,
+                   ida_args=ida_args)
 
     if args.open:
         logmsg("OPENING FILES")
         do_dir(args.inputdir, args.filter, args.verbose, max_ida=None,
-               do_file=open_file, list_only=args.list_only)
+               do_file=open_file, list_only=args.list_only, ida_args=ida_args)
         sys.exit()
 
     end_time = time.time()

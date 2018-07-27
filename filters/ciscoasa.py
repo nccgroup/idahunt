@@ -122,11 +122,12 @@ def build_version(dirname):
 
 # do we actually treat it?
 def filter(f, min, max, arch, name, verbose):
+    # Check hardcoded whitelist as a sanity check
     files = ["lina", "lina_monitor", "libc.so.6"]
     if os.path.basename(f) not in files:
         #logmsg("Skipping unrecognized file: %s" % os.path.basename(f))
         return None
-    # XXX - why do we do both above and below checks? just below should do?
+    # Check user-specified whitelist
     if name and name != os.path.basename(f):
         logmsg("Skipping wrong filename: %s" % f, debug=verbose)
         return None
