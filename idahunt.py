@@ -84,7 +84,10 @@ def open_file(ida_executable, infile, logfile, idbfile, verbose, ida_args=None, 
         logmsg("Skipping existing id0 %s. Close IDB first." % (infile + ".id0"), debug=verbose)
         return False
     logmsg("Opening %s" % infile)
-    cmd = [ida_executable, idbfile]
+    if ida_args:
+        cmd = [ida_executable] + ida_args + [idbfile]
+    else:
+        cmd = [ida_executable, idbfile]
     if verbose:
         logmsg("%s" % " ".join(cmd))
     shell=True
@@ -126,7 +129,7 @@ def exec_ida_python_script(ida_executable, infile, logfile, idbfile, verbose, id
     logmsg("Executing script %s for %s" % (abs_script, infile))
     # open IDA but at least does not display message boxes to the user.
     if ida_args:
-        cmd = [ida_executable, "-A", "-S%s" % abs_script, "-L%s" % logfile] + ida_args + [infile] # infile vs idbfile
+        cmd = [ida_executable, "-A", "-S%s" % abs_script, "-L%s" % logfile] + ida_args + [idbfile]
     else:
         cmd = [ida_executable, "-A", "-S%s" % abs_script, "-L%s" % logfile, idbfile]
     if verbose:
@@ -281,9 +284,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if not args.analyse and not args.cleanup_temporary and \
-        not args.cleanup and args.scripts == None:
+        not args.cleanup and args.scripts == None and args.open == None:
         logmsg("ERROR: You didn't specify an action. Don't know what to do")
-        logmsg("ERROR: Try --analyse or --cleanup or --temp-cleanup or --scripts")
+        logmsg("ERROR: Try --analyse or --cleanup or --temp-cleanup or --scripts or --open")
         sys.exit(1)
 
     if args.list_only:
@@ -358,7 +361,7 @@ if __name__ == "__main__":
     # clean the dir, create idbs, rename all the idbs, and then update a
     # database all in one run
 
-    if args.list_only and (not args.analyse and not args.scripts and not args.cleanup and not args.cleanup_temporary):
+    if args.list_only and (not args.analyse and not args.scripts and not args.cleanup and not args.cleanup_temporary and args.open == None):
         logmsg("ERROR: You must use --cleanup, --analyse or --scripts with --list-only")
         sys.exit()
 
