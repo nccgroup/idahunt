@@ -61,12 +61,14 @@ def rename_function(e, funcname):
             return False
     return True
 
-# Remove name for a function (most likely to have sub_XXXXXXXX back after that)
-def unname_function(e):
+def uname_whatever(e):
     if not MakeName(e, ""):
-        print("[ida_helper] Error: unname_function: could not remove name for function")
+        print("[ida_helper] Error: uname_whatever: could not remove name for element")
         return False
     return True
+
+# Remove name for a function (most likely to have sub_XXXXXXXX back after that)
+unname_function = uname_whatever
 
 # For each segment name, save start address, end address in a dictionary
 # This can be used to know if a pointer in one segment is part of another
