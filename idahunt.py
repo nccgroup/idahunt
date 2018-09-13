@@ -163,7 +163,7 @@ def delete_asm_files(inputdir, list_only=False):
                 os.remove(f)
 
 # main function handling an input folder
-# do_dir is one of {analyse_file,open_file,exec_ida_python_script}
+# do_file is one of {analyse_file,open_file,exec_ida_python_script}
 def do_dir(inputdir, filter, verbose, max_ida, do_file, ida_args=None, script=None, list_only=False):
     pids = []
     call_count = 0
@@ -401,7 +401,7 @@ if __name__ == "__main__":
 
     if args.open:
         logmsg("OPENING FILES")
-        do_dir(args.inputdir, args.filter, args.verbose, max_ida=None,
+        do_dir(args.inputdir, args.filter, args.verbose, max_ida=args.max_ida,
                do_file=open_file, list_only=args.list_only, ida_args=ida_args)
         sys.exit()
 
