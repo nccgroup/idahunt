@@ -615,6 +615,105 @@ def rename_function_by_aString_being_used_with_filter(aString, funcName, prevFun
         return False
     return True
 
+# ARM only atm
+# similar to rename_function_by_aString_surrounding_call()
+# but instead of assuming knowing an IDA aString label, takes
+# a sequence of characters to look for in order to find the right
+# aString
+# Note: str can be null terminated or not, or have any byte value
+def rename_function_by_ascii_surrounding_call(str, funcName, xref_func=MyFirstXrefTo, count_max=10, filtered_funcs=[], count_filtered_funcs=0):
+
+    h = binascii.hexlify(str)
+    bytes_str = " ".join([h[i:i+2] for i in range(0, len(h), 2)])
+    matches = find_all(bytes_str)
+    if len(matches) != 1:
+        print("[ida_helper] ERROR: rename_function_by_ascii_surrounding_call does not support multiple strings")
+        return False
+    str_addr = matches[0]
+    aString = Name(str_addr)
+    if not aString:
+        print("[ida_helper] ERROR: rename_function_by_ascii_surrounding_call did not find any name for aString")
+        return False
+
+    return rename_function_by_aString_surrounding_call(aString, funcName, xref_func=xref_func, count_max=count_max, filtered_funcs=filtered_funcs, count_filtered_funcs=count_filtered_funcs)
+
+# ARM only atm
+# Uses an IDA string label (aString) to find a function and then list all instructions
+# backwards looking for ARM Branch With Link instruction "BL". And rename the function
+# part of the BL instruction.
+def rename_function_by_aString_surrounding_call(aString, funcName, xref_func=MyFirstXrefTo, count_max=10, filtered_funcs=[], count_filtered_funcs=0, head_func=PrevHead):
+    global ERROR_MINUS_1
+    if MyLocByName(funcName) != None:
+        print("[ida_helper] %s already defined" % funcName)
+        return True
+
+    if filtered_funcs and count_filtered_funcs > 0:
+        print("[ida_helper] ERROR: Only one argument is supported")
+        return False
+
+    # required functions to locate funcName
+    for filtered_name in filtered_funcs:
+        if MyLocByName(filtered_name) == None:
+            print("[ida_helper] required function: %s missing, can't locate %s" % (filtered_name, funcName))
+            return False
+
+    addr_str = MyLocByName(aString)
+    if addr_str == None:
+        return False
+    addr_str_used = xref_func(addr_str)
+    if addr_str_used == None:
+        return False
+    try:
+        sark.Function(ea=addr_str_used)
+    except sark.exceptions.SarkNoFunction:
+        print("[ida_helper] No function at 0x%x when handling aSTooShortDD_0" % ea)
+        return False
+
+    count = 0
+    e = addr_str_used
+    bFound = False
+    while count <= count_max:
+        e = head_func(e)
+        line = sark.Line(e)
+        #print(line)
+        try:
+            insn = line.insn
+        except sark.exceptions.SarkNoInstruction:
+            print("[ida_helper] data in the middle of instructions at 0x%x, not supported yet" % e)
+            return False
+        if insn.mnem == "BL":
+            if len(insn.operands) != 1:
+                print("[ida_helper] Wrong number of operands for BL at 0x%x" % e)
+                return False
+            curr_func_name = insn.operands[0].text
+            # do we need to skip this "BL" or are we done?
+            bFiltered = False
+            if count_filtered_funcs > 0:
+                print("[ida_helper] skipping filtered due to count: %d at 0x%x" % (count_filtered_funcs, e))
+                count_filtered_funcs -= 1
+                bFiltered = True
+            else:
+                for filtered_name in filtered_funcs:
+                    if curr_func_name == filtered_name:
+                        print("[ida_helper] skipping filtered name: %s at 0x%x" % (filtered_name, e))
+                        bFiltered = True
+                        break
+            if bFiltered:
+                count +=1
+                continue
+            func_addr = MyLocByName(curr_func_name)
+            if func_addr == None:
+                return False
+            MyMakeName(func_addr, funcName)
+            print("[ida_helper] %s = 0x%x" % (funcName, func_addr))
+            bFound = True
+            break
+        count += 1
+    if not bFound:
+        print("[ida_helper] ERROR: %s not found" % funcName)
+        return False
+    return True
+
 # Starts from address (e) and goes backwards until it finds a pointer to another
 # segment, stopping after count_max instructions
 # seg_info = get_segments_info() is passed to this function
