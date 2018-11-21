@@ -312,7 +312,7 @@ if __name__ == "__main__":
                     pass
         else:
             #IDA32="C:\\Program Files (x86)\\IDA 6.95\\idaq.exe"
-            IDA32="C:\\Program Files\\IDA 7.1\\ida.exe"
+            IDA32="C:\\Program Files\\IDA 7.2\\ida.exe"
             # XXX - Test the file exists here... We shouldn't rely on a version
             ida32_found = True
 
@@ -336,7 +336,7 @@ if __name__ == "__main__":
                     pass
         else:
             #IDA64="C:\\Program Files (x86)\\IDA 6.95\\idaq64.exe"
-            IDA64="C:\\Program Files\\IDA 7.1\\ida64.exe"
+            IDA64="C:\\Program Files\\IDA 7.2\\ida64.exe"
             # XXX - Test the file exists here... We shouldn't rely on a version
             ida64_found = True
 

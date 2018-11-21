@@ -469,6 +469,56 @@ def get_call_arguments_x64(e = ScreenEA(), count_max = 10):
         count += 1
     return args
 
+# Similar to get_call_arguments_x64() but for ARM 32-bit. See get_call_arguments_1()
+# for more information.
+def get_call_arguments_arm(e=ScreenEA(), count_max=10):
+    args = {}
+
+    # are we a BL instruction?
+    mnem = print_insn_mnem(e)
+    if mnem != "BL":
+        print("[ida_helper] Error: not a BL instruction at 0x%x" % e)
+        return None
+
+    # we only supports 4 arguments
+    arg_instructions_arm_mov = ["MOV             R0,",
+                                "MOV             R1,",
+                                "MOV             R2,",
+                                "MOV             R3,"]
+    arg_instructions_arm_adr = ["ADR             R0,",
+                                "ADR             R1,",
+                                "ADR             R2,",
+                                "ADR             R3,"]
+    arg_instructions_arm_ldr = ["LDR             R0,",
+                                "LDR             R1,",
+                                "LDR             R2,",
+                                "LDR             R3,"]
+    # parse arguments, parsing instructions backwards
+    e = PrevHead(e)
+    count = 0
+    # we only supports 10 instructions backwards looking for arguments
+    while count <= count_max:
+        #print("[ida_helper] '%s'" % GetDisasm(e))
+        for i in range(len(arg_instructions_arm_mov)):
+            #print("[ida_helper] '%s'" % arg_instructions_arm_mov[i])
+            #print("[ida_helper] Testing index %d" % i)
+            # First arrive, first serve
+            # We suppose that the instruction closest to the call is the one giving the argument.
+            # If we encounter another instruction with "MOV reg" later with the same offset, we ignore it
+            if arg_instructions_arm_mov[i] in GetDisasm(e) or \
+               arg_instructions_arm_adr[i] in GetDisasm(e):
+                if i not in args.keys():
+                    args[i] = get_operand_value(e,1)
+                    #print("[ida_helper] Found argument %d: 0x%x" % (i, args[i]))
+            elif arg_instructions_arm_ldr[i] in GetDisasm(e):
+                if i not in args.keys():
+                    addr = get_operand_value(e,1)
+                    args[i] = Dword(addr)
+                    #print("[ida_helper] Found argument %d: 0x%x" % (i, args[i]))
+        e = PrevHead(e)
+        count += 1
+    return args
+
 # Wrapper to have a generic method to get arguments for a function call
 # based on internal helpers.
 def get_call_arguments(e=ScreenEA(), count_max=10):
@@ -478,6 +528,8 @@ def get_call_arguments(e=ScreenEA(), count_max=10):
             args = get_call_arguments_2(e, count_max)
         if not args:
             args = get_call_arguments_3(e, count_max)
+        if not args:
+            args = get_call_arguments_arm(e, count_max)
     else:
         args = get_call_arguments_x64(e, count_max)
     return args
