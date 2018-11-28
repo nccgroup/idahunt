@@ -476,8 +476,8 @@ def get_call_arguments_arm(e=ScreenEA(), count_max=10):
 
     # are we a BL instruction?
     mnem = print_insn_mnem(e)
-    if mnem != "BL":
-        print("[ida_helper] Error: not a BL instruction at 0x%x" % e)
+    if mnem != "BL" and mnem != "SVC":
+        print("[ida_helper] Error: not a BL or SVC instruction at 0x%x" % e)
         return None
 
     # we only supports 4 arguments
