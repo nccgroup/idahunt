@@ -41,7 +41,7 @@ def build_version(dirname):
 def filter(f, min_ilo, max_ilo, min, max, name, verbose):
     # Check hardcoded whitelist as a sanity check
     # We expect something like ".webserv.elf.text"
-    if ".text" not in os.path.basename(f):
+    if ".text" not in os.path.basename(f) and ".RO" not in os.path.basename(f):
         #logmsg("Skipping unrecognized file: %s" % os.path.basename(f))
         return None
     # Check user-specified whitelist
