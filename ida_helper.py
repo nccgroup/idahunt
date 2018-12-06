@@ -673,7 +673,7 @@ def rename_function_by_aString_being_used_with_filter(aString, funcName, prevFun
 # a sequence of characters to look for in order to find the right
 # aString
 # Note: str can be null terminated or not, or have any byte value
-def rename_function_by_ascii_surrounding_call(str, funcName, xref_func=MyFirstXrefTo, count_max=10, filtered_funcs=[], count_filtered_funcs=0):
+def rename_function_by_ascii_surrounding_call(str, funcName, xref_func=MyFirstXrefTo, count_max=10, filtered_funcs=[], count_filtered_funcs=0, head_func=PrevHead):
 
     h = binascii.hexlify(str)
     bytes_str = " ".join([h[i:i+2] for i in range(0, len(h), 2)])
@@ -687,7 +687,7 @@ def rename_function_by_ascii_surrounding_call(str, funcName, xref_func=MyFirstXr
         print("[ida_helper] ERROR: rename_function_by_ascii_surrounding_call did not find any name for aString")
         return False
 
-    return rename_function_by_aString_surrounding_call(aString, funcName, xref_func=xref_func, count_max=count_max, filtered_funcs=filtered_funcs, count_filtered_funcs=count_filtered_funcs)
+    return rename_function_by_aString_surrounding_call(aString, funcName, xref_func=xref_func, count_max=count_max, filtered_funcs=filtered_funcs, count_filtered_funcs=count_filtered_funcs, head_func=head_func)
 
 # ARM only atm
 # Uses an IDA string label (aString) to find a function and then list all instructions
