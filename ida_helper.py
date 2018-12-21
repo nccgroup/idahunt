@@ -10,6 +10,10 @@ from idautils import *
 import idaapi
 import sark
 import binascii
+import sys
+import ida_segment
+import idautils
+import idaapi
 
 # Attempt to have globals we can use in all other functions without having to
 # worry about architecture :)
@@ -72,6 +76,14 @@ def uname_whatever(e):
 # Remove name for a function (most likely to have sub_XXXXXXXX back after that)
 unname_function = uname_whatever
 
+# Retrieve a list with all the idbs' segments' names
+def get_segments():
+    seg_names = []
+    for seg in idautils.Segments():
+        st = ida_segment.getseg(seg)
+        seg_names.append(idaapi.get_true_segm_name(st))
+    return seg_names
+
 # Note this must match the list of segments in the current file
 default_seg_names = [".init", ".plt", ".text", ".fini", ".rodata", ".eh_frame_hdr",
              "eh_frame", ".gcc_except_table", ".tdata", ".ctors", ".dtors",
@@ -127,6 +139,16 @@ def MyFirstXrefTo(addr):
         addr = e.frm
         return addr
     print("[ida_helper] Error: MyFirstXrefTo: Failed to find xref for 0x%x" % addr)
+    return None
+
+# Gives the first Xref of first Xref to an address
+def MyFirstXrefOfFirstXrefTo(addr):
+    for e in XrefsTo(addr):
+        addr = e.frm
+        for e in XrefsTo(addr):
+            addr = e.frm
+            return addr
+    print("[ida_helper] Error: MyFirstXrefOfFirstXrefTo: Failed to find xref for 0x%x" % addr)
     return None
 
 # Gives the second Xref
@@ -476,8 +498,8 @@ def get_call_arguments_arm(e=ScreenEA(), count_max=10):
 
     # are we a BL instruction?
     mnem = print_insn_mnem(e)
-    if mnem != "BL" and mnem != "SVC":
-        print("[ida_helper] Error: not a BL or SVC instruction at 0x%x" % e)
+    if mnem != "BL" and mnem != "SVC" and mnem != "BLNE" and mnem != "BLHI" and mnem != "BLEQ":
+        print("[ida_helper] Error: not a BL or SVC or BLNE or BLHI or BLEQ instruction at 0x%x" % e)
         return None
 
     # we only supports 4 arguments
@@ -493,6 +515,18 @@ def get_call_arguments_arm(e=ScreenEA(), count_max=10):
                                 "LDR             R1,",
                                 "LDR             R2,",
                                 "LDR             R3,"]
+    arg_instructions_arm_adr2 = ["ADREQ           R0,",
+                                 "ADREQ           R1,",
+                                 "ADDEQ           R2,",
+                                 "ADREQ           R3,"]
+    arg_instructions_arm_mov2 = ["MOVEQ           R0,",
+                                 "MOVEQ           R1,",
+                                 "MOVEQ           R2,",
+                                 "MOVEQ           R3,"]
+    arg_instructions_arm_adr3 = ["ADRNE           R0,",
+                                 "ADRNE           R1,",
+                                 "ADDNE           R2,",
+                                 "ADRNE           R3,"]
     # parse arguments, parsing instructions backwards
     e = PrevHead(e)
     count = 0
@@ -506,7 +540,10 @@ def get_call_arguments_arm(e=ScreenEA(), count_max=10):
             # We suppose that the instruction closest to the call is the one giving the argument.
             # If we encounter another instruction with "MOV reg" later with the same offset, we ignore it
             if arg_instructions_arm_mov[i] in GetDisasm(e) or \
-               arg_instructions_arm_adr[i] in GetDisasm(e):
+               arg_instructions_arm_mov2[i] in GetDisasm(e) or \
+               arg_instructions_arm_adr[i] in GetDisasm(e) or \
+               arg_instructions_arm_adr2[i] in GetDisasm(e) or \
+               arg_instructions_arm_adr3[i] in GetDisasm(e):
                 if i not in args.keys():
                     args[i] = get_operand_value(e,1)
                     #print("[ida_helper] Found argument %d: 0x%x" % (i, args[i]))
@@ -718,7 +755,7 @@ def rename_function_by_aString_surrounding_call(aString, funcName, xref_func=MyF
     try:
         sark.Function(ea=addr_str_used)
     except sark.exceptions.SarkNoFunction:
-        print("[ida_helper] No function at 0x%x when handling aSTooShortDD_0" % ea)
+        print("[ida_helper] No function at 0x%x when handling %s" % (addr_str_used, aString))
         return False
 
     count = 0
