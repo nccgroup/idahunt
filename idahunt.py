@@ -21,6 +21,7 @@ import subprocess
 import time
 import glob
 import filelock
+import struct
 
 def logmsg(s, end=None, debug=True):
     if not debug:
@@ -46,9 +47,38 @@ def iglob_hidden(*args, **kwargs):
 def path_to_module_string(p):
     return p.replace("/", ".").replace("\\", ".")
 
+
+def check_arch(filename):
+    IMAGE_FILE_MACHINE_I386=332
+    IMAGE_FILE_MACHINE_IA64=512
+    IMAGE_FILE_MACHINE_AMD64=34404
+    arch = None
+    f=open(filename, "rb")
+    s=f.read(2)
+    if s!=b"MZ":
+        print("Not an EXE file")
+    else:
+        f.seek(60)
+        s=f.read(4)
+        header_offset=struct.unpack("<L", s)[0]
+        f.seek(header_offset+4)
+        s=f.read(2)
+        machine=struct.unpack("<H", s)[0]
+        if machine==IMAGE_FILE_MACHINE_I386:
+            arch = 32
+        elif machine==IMAGE_FILE_MACHINE_IA64:
+            arch = 64
+        elif machine==IMAGE_FILE_MACHINE_AMD64:
+            arch = 64
+        else:
+            arch = None
+        f.close()
+    return arch
+
+
 # Does the initial auto-analysis when we first open a file in IDA
 # Returns False if does not do anything, the subprocess if it was created
-# of True if it was listing only.
+# of True if it was listing only.f
 def analyse_file(ida_executable, infile, logfile, idbfile, verbose, ida_args=None, script=None, list_only=False):
     if os.path.isfile(idbfile):
         logmsg("Skipping existing IDB %s. Analysis has already been made" % idbfile, debug=verbose)
@@ -187,7 +217,8 @@ def do_dir(inputdir, filter, verbose, max_ida, do_file, ida_args=None, script=No
             res = m.main(f, filter)
             if res == None:
                 continue
-            infile, arch = res
+            arch = check_arch(f)
+            
             if arch == 32:
                 ida_executable = IDA32
                 idbfile = f_noext + ".idb"
@@ -195,7 +226,7 @@ def do_dir(inputdir, filter, verbose, max_ida, do_file, ida_args=None, script=No
                 ida_executable = IDA64
                 idbfile = f_noext + ".i64"
             else:
-                logmsg("Invalid architecture returned by filter")
+                logmsg("Invalid architecture returned by parser")
                 sys.exit()
         else:
                 logmsg("Must specify filter")
@@ -312,7 +343,7 @@ if __name__ == "__main__":
                     pass
         else:
             #IDA32="C:\\Program Files (x86)\\IDA 6.95\\idaq.exe"
-            IDA32="C:\\Program Files\\IDA 7.2\\ida.exe"
+            IDA32="C:\\Program Files\\IDA 7.0\\ida.exe"
             # XXX - Test the file exists here... We shouldn't rely on a version
             ida32_found = True
 
@@ -336,7 +367,7 @@ if __name__ == "__main__":
                     pass
         else:
             #IDA64="C:\\Program Files (x86)\\IDA 6.95\\idaq64.exe"
-            IDA64="C:\\Program Files\\IDA 7.2\\ida64.exe"
+            IDA64="C:\\Program Files\\IDA 7.0\\ida64.exe"
             # XXX - Test the file exists here... We shouldn't rely on a version
             ida64_found = True
 
