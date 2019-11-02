@@ -26,7 +26,7 @@ def logmsg(s, end=None, debug=True):
         print(s)
 
 # do we actually treat it?
-def filter(f, name, extension, arch, verbose=True):
+def filter(f, name, extension, verbose=True):
     if name and not name in os.path.basename(f):
         logmsg("Skipping non-matching name %s in %s" % (name, os.path.basename(f)))
         return None
@@ -39,16 +39,7 @@ def filter(f, name, extension, arch, verbose=True):
     if name and not name in os.path.basename(f):
         logmsg("Skipping non-matching name %s in %s" % (name, os.path.basename(f)))
         return None
-
-    if arch == "64":
-        arch_ = 64
-    elif arch == "32":
-        arch_ = 32
-    else:
-        logmsg("Unknown architecture: %s. You need to specify it with -a" % arch)
-        return None
-
-    return f, arch_
+    return f, 
 
 def main(f, cmdline):
     # We override sys.argv so argparse can parse our arguments :)
@@ -59,10 +50,8 @@ def main(f, cmdline):
                         to include in the name')
     parser.add_argument('-e', dest='extension', default=None, help='Exact \
                         extension to match')
-    parser.add_argument('-a', dest='arch', default=None, help='Assume \
-                         architecture known by user')
     parser.add_argument('-v', dest='verbose', default=False, action='store_true'
                         , help='be more verbose to debug script')
     args = parser.parse_args()
 
-    return filter(f, args.name, args.extension, args.arch, args.verbose)
+    return filter(f, args.name, args.extension, args.verbose)
