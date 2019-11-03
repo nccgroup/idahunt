@@ -44,6 +44,8 @@ def filter(f, name, extension, arch, verbose=True):
         arch_ = 64
     elif arch == "32":
         arch_ = 32
+    elif arch == "auto":
+        arch_ = "auto"
     else:
         logmsg("Unknown architecture: %s. You need to specify it with -a" % arch)
         return None
