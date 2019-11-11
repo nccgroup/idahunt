@@ -47,32 +47,33 @@ def iglob_hidden(*args, **kwargs):
 def path_to_module_string(p):
     return p.replace("/", ".").replace("\\", ".")
 
-def check_arch(filename):
-    IMAGE_FILE_MACHINE_I386=332
-    IMAGE_FILE_MACHINE_IA64=512
-    IMAGE_FILE_MACHINE_AMD64=34404
+# Automatically detects the architecture for PE files
+def detect_arch_pe_files(filename):
+    IMAGE_FILE_MACHINE_I386 = 332
+    IMAGE_FILE_MACHINE_IA64 = 512
+    IMAGE_FILE_MACHINE_AMD64 = 34404
     arch = None
-    f=open(filename, "rb")
-    s=f.read(2)
-    if s!=b"MZ":
-        print("Not an EXE file")
+    f = open(filename, "rb")
+    s = f.read(2)
+    if s != b"MZ":
+        logmsg("Not an EXE file. Ignoring automatic architecture detection")
     else:
         f.seek(60)
-        s=f.read(4)
-        header_offset=struct.unpack("<L", s)[0]
+        s = f.read(4)
+        header_offset = struct.unpack("<L", s)[0]
         f.seek(header_offset+4)
-        s=f.read(2)
-        machine=struct.unpack("<H", s)[0]
-        if machine==IMAGE_FILE_MACHINE_I386:
+        s = f.read(2)
+        machine = struct.unpack("<H", s)[0]
+        if machine == IMAGE_FILE_MACHINE_I386:
             arch = 32
-        elif machine==IMAGE_FILE_MACHINE_IA64:
+        elif machine == IMAGE_FILE_MACHINE_IA64:
             arch = 64
-        elif machine==IMAGE_FILE_MACHINE_AMD64:
+        elif machine == IMAGE_FILE_MACHINE_AMD64:
             arch = 64
         else:
             arch = None
             logmsg("Unknown architecture detected")
-            sys.exit()
+            sys.exit(1)
         f.close()
     return arch
 
@@ -99,7 +100,7 @@ def analyse_file(ida_executable, infile, logfile, idbfile, verbose, ida_args=Non
         shell=False
 
     if not list_only:
-        return subprocess.Popen(cmd, shell=True)
+        return subprocess.Popen(cmd, shell)
     else:
         return True
 
@@ -220,12 +221,12 @@ def do_dir(inputdir, filter, verbose, max_ida, do_file, ida_args=None, script=No
             infile, arch = res
 
             if arch == "auto":
-                arch_check_result = check_arch(f)
+                arch = detect_arch_pe_files(f)
 
-            if (arch == 32) or (arch_check_result == 32):
+            if arch == 32:
                 ida_executable = IDA32
                 idbfile = f_noext + ".idb"
-            elif (arch == 64) or (arch_check_result == 64):
+            elif arch == 64:
                 ida_executable = IDA64
                 idbfile = f_noext + ".i64"
             else:
@@ -315,8 +316,9 @@ if __name__ == "__main__":
                         help='Maximum number of instances of IDA to run at a time (default: 10)')
     parser.add_argument('--list-only', dest='list_only', default=False, action="store_true",
                         help='List only what files would be handled without executing IDA')
-    parser.add_argument('--version', dest='ida_version', default=None,
-                        help='IDA version')
+    parser.add_argument('--version', dest='ida_version', default="7.4",
+                        help='Override IDA version (e.g. "7.4"). This is used to find the path \
+                        of IDA on Windows.')
     args = parser.parse_args()
 
     if not args.analyse and not args.cleanup_temporary and \
@@ -327,10 +329,6 @@ if __name__ == "__main__":
 
     if args.list_only:
         logmsg("Simulating only...")
-
-    if not args.ida_version and not args.list_only:
-        logmsg("ERROR: You need to provide an IDA version with  --version")
-        sys.exit()
 
     ida_version = args.ida_version
     ida32_found = False
@@ -386,7 +384,6 @@ if __name__ == "__main__":
                 path in IDA32 and IDA64 environment variables, since we can't find them.")
         sys.exit(1)
 
-
     if args.verbose:
         logmsg("IDA32 = %s" % IDA32)
         logmsg("IDA64 = %s" % IDA64)
@@ -394,7 +391,6 @@ if __name__ == "__main__":
     if not args.inputdir:
         logmsg("ERROR: You need to provide an input directory with --inputdir")
         sys.exit()
-
 
     if not os.path.exists(args.inputdir):
         logmsg("ERROR: The path you provided doesn't exist: %s" % args.inputdir)
