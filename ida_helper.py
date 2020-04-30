@@ -142,6 +142,13 @@ def name_to_addr(s):
         return None
     return addr
 
+def addr_to_name(ea):
+    name = get_name(ea, ida_name.GN_VISIBLE)
+    if name == "":
+        logmsg("Error: addr_to_name: Failed to find '0x%x' address" % ea)
+        return ""
+    return name
+
 # Gives the first Xref
 def first_xref(addr):
     for e in XrefsTo(addr):
