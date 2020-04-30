@@ -16,6 +16,15 @@ import idautils
 import idaapi
 import ida_name
 
+def logmsg(s, end=None):
+    if type(s) == str:
+        if end != None:
+            print("[ida_helper] " + s, end=end)
+        else:
+            print("[ida_helper] " + s)
+    else:
+        print(s)
+
 # Attempt to have globals we can use in all other functions without having to
 # worry about architecture :)
 info = idaapi.get_inf_structure()
@@ -34,7 +43,7 @@ else:
 def get_xrefs(ea = get_screen_ea()):
     res = []
     for e in XrefsTo(ea):
-        #print("[ida_helper] 0x%x -> 0x%x" % (e.frm, e.to))
+        #logmsg("0x%x -> 0x%x" % (e.frm, e.to))
         res.append(e.frm)
     return res
 
@@ -42,7 +51,7 @@ def get_xrefs(ea = get_screen_ea()):
 def get_current_function(ea = get_screen_ea()):
     func = idaapi.get_func(ea)
     funcname = get_func_name(func.start_ea)
-    #print("[ida_helper] %X is in %s" % (ea, funcname))
+    #logmsg("%X is in %s" % (ea, funcname))
     return funcname
 
 # Gives the current function's address an address is part of
@@ -58,19 +67,19 @@ def rename_function(e, funcname):
     currname = funcname
     count = 1
     if e == None:
-        print("[ida_helper] Error: can't rename Nonetype to %s" % funcname)
+        logmsg("Error: can't rename Nonetype to %s" % funcname)
         return False
     while not set_name(e, currname, SN_CHECK):
         currname = "%s_%d" % (funcname, count)
         count += 1
         if count > 100:
-            print("[ida_helper] Error: rename_function looped too much for 0x%d -> %s" % (e, funcname))
+            logmsg("Error: rename_function looped too much for 0x%d -> %s" % (e, funcname))
             return False
     return True
 
 def uname_whatever(e):
     if not set_name(e, "", SN_CHECK):
-        print("[ida_helper] Error: uname_whatever: could not remove name for element")
+        logmsg("Error: uname_whatever: could not remove name for element")
         return False
     return True
 
@@ -120,9 +129,9 @@ def addr_is_in_one_segment(addr, seg_info):
 def NameToRVA(s):
     addr = get_name_ea_simple(s)
     if addr == ERROR_MINUS_1:
-        print("[ida_helper] Error: NameToRVA: Failed to find '%s' symbol" % s)
+        logmsg("Error: NameToRVA: Failed to find '%s' symbol" % s)
         return None
-    print("[ida_helper] image base 0x%x" % idaapi.get_imagebase())
+    logmsg("image base 0x%x" % idaapi.get_imagebase())
     return addr - idaapi.get_imagebase()
 
 
@@ -130,7 +139,7 @@ def NameToRVA(s):
 def MyLocByName(s):
     addr = get_name_ea_simple(s)
     if addr == ERROR_MINUS_1:
-        print("[ida_helper] Error: MyLocByName: Failed to find '%s' symbol" % s)
+        logmsg("Error: MyLocByName: Failed to find '%s' symbol" % s)
         return None
     return addr
 
@@ -139,7 +148,7 @@ def MyFirstXrefTo(addr):
     for e in XrefsTo(addr):
         addr = e.frm
         return addr
-    print("[ida_helper] Error: MyFirstXrefTo: Failed to find xref for 0x%x" % addr)
+    logmsg("Error: MyFirstXrefTo: Failed to find xref for 0x%x" % addr)
     return None
 
 # Gives the first Xref of first Xref to an address
@@ -149,7 +158,7 @@ def MyFirstXrefOfFirstXrefTo(addr):
         for e in XrefsTo(addr):
             addr = e.frm
             return addr
-    print("[ida_helper] Error: MyFirstXrefOfFirstXrefTo: Failed to find xref for 0x%x" % addr)
+    logmsg("Error: MyFirstXrefOfFirstXrefTo: Failed to find xref for 0x%x" % addr)
     return None
 
 # Gives the second Xref
@@ -160,7 +169,7 @@ def MySecondXrefTo(addr):
         if i == 2:
             return frm
         i += 1
-    print("[ida_helper] Error: MySecondXrefTo: Failed to find xref for 0x%x" % addr)
+    logmsg("Error: MySecondXrefTo: Failed to find xref for 0x%x" % addr)
     return None
 
 # Gives the third Xref
@@ -171,7 +180,7 @@ def MyThirdXrefTo(addr):
         if i == 3:
             return frm
         i += 1
-    print("[ida_helper] Error: MyThirdXrefTo: Failed to find xref for 0x%x" % addr)
+    logmsg("Error: MyThirdXrefTo: Failed to find xref for 0x%x" % addr)
     return None
 
 # Gives the last Xref
@@ -181,21 +190,21 @@ def MyLastXrefTo(addr):
         frm = e.frm
         #print("0x%x" % frm)
     if frm == None:
-        print("[ida_helper] Error: MyLastXrefTo: Failed to find xref for 0x%x" % addr)
+        logmsg("Error: MyLastXrefTo: Failed to find xref for 0x%x" % addr)
     return frm
 
 # Gives the current function's address an address is part of
 def MyGetFuncStartEA(ea):
     func = idaapi.get_func(ea)
     if not func:
-        print("[ida_helper] Error: MyGetFuncStartEA: Failed to find function start for 0x%x" % ea)
+        logmsg("Error: MyGetFuncStartEA: Failed to find function start for 0x%x" % ea)
         return None
     return func.start_ea
 
 # Rename a function
 def MyMakeName(e, funcname):
     if not set_name(e, funcname, SN_CHECK):
-        print("[ida_helper] Error: MyMakeName: Impossible to rename 0x%x with %s" % (e, funcname))
+        logmsg("Error: MyMakeName: Impossible to rename 0x%x with %s" % (e, funcname))
         return None
     return "OK"
 
@@ -207,11 +216,11 @@ def find_gadget(byteStr):
     while addr <= seg_info[".text"]["end_ea"]:
         b = get_bytes(addr, len(byteStr))
         if b == byteStr:
-            #print("[ida_helper] Found candidate for gadget %s in .text at 0x%x" % (binascii.hexlify(byteStr), addr))
+            #logmsg("Found candidate for gadget %s in .text at 0x%x" % (binascii.hexlify(byteStr), addr))
             return addr
         addr += 1
     if addr > seg_info[".data"]["end_ea"]:
-        print("[ida_helper] Error: Could not find gadget in .text")
+        logmsg("Error: Could not find gadget in .text")
         return None
 
 # helper for get_call_arguments()-like for when we get a register instead of a useful
@@ -230,7 +239,7 @@ def get_register_value(e=get_screen_ea(), register=None, count_max=20):
 
     reg = print_operand(e, 1)
     if register != reg:
-        print("[ida_helper] Error: bad register at 0x%x" % e)
+        logmsg("Error: bad register at 0x%x" % e)
         return None
 
     arg_instructions = ["mov     %s",
@@ -240,11 +249,11 @@ def get_register_value(e=get_screen_ea(), register=None, count_max=20):
     e = prev_head(e)
     count = 0
     while count <= count_max:
-        #print("[ida_helper] '%s'" % GetDisasm(e))
+        #logmsg("'%s'" % GetDisasm(e))
         for i in range(len(arg_instructions)):
             ins = arg_instructions[i] % register
             if ins in GetDisasm(e):
-                #print("[ida_helper] 0x%x - Matches '%s'" % (e, ins))
+                #logmsg("0x%x - Matches '%s'" % (e, ins))
                 # First arrive, first serve
                 # We suppose that the instruction closest is the
                 # one giving the register value.
@@ -256,11 +265,11 @@ def get_register_value(e=get_screen_ea(), register=None, count_max=20):
                 # mov     [rdx+18h], rax
                 if get_operand_type(e, 1) == o_mem:
                     val = get_operand_value(e, 1)
-                    #print("[ida_helper] Found register value %s: 0x%x" % (register, val))
+                    #logmsg("Found register value %s: 0x%x" % (register, val))
                     return val
         e = prev_head(e)
         count += 1
-    #print("[ida_helper] Could not find register value")
+    #logmsg("Could not find register value")
     return None
 
 # For a given address, check instructions above looking for potential arguments
@@ -283,7 +292,7 @@ def get_structure_offsets(e=get_screen_ea(), count_max=10, reg="esp"):
     # are we a call instruction?
     mnem = print_insn_mnem(e)
     if mnem != "call" and mnem != "jmp":
-        print("[ida_helper] Error: not a call instruction at 0x%x" % e)
+        logmsg("Error: not a call instruction at 0x%x" % e)
         return None
 
     # we hardcode the instructions that we are looking for i.e. we don't look
@@ -325,10 +334,10 @@ def get_structure_offsets(e=get_screen_ea(), count_max=10, reg="esp"):
     count = 0
     # we only supports 10 instructions backwards looking for arguments
     while count <= count_max:
-        #print("[ida_helper] '%s'" % GetDisasm(e))
+        #logmsg("'%s'" % GetDisasm(e))
         for i in range(len(arg_instructions)):
             if arg_instructions[i] in GetDisasm(e):
-                #print("[ida_helper] 0x%x - Matches '%s'" % (e, arg_instructions[i]))
+                #logmsg("0x%x - Matches '%s'" % (e, arg_instructions[i]))
                 # First arrive, first serve
                 # We suppose that the instruction closest to the call is the
                 # one giving the argument.
@@ -336,23 +345,23 @@ def get_structure_offsets(e=get_screen_ea(), count_max=10, reg="esp"):
                 # later with the same offset, we ignore it
                 if i not in args.keys():
                     args[i] = get_operand_value(e,1)
-                    #print("[ida_helper] Found argument %d: 0x%x" % (i, args[i]))
+                    #logmsg("Found argument %d: 0x%x" % (i, args[i]))
         for i in range(len(arg_instructions_2)):
             if arg_instructions_2[i] in GetDisasm(e):
-                #print("[ida_helper] Matches '%s'" % arg_instructions_2[i])
+                #logmsg("Matches '%s'" % arg_instructions_2[i])
                 if i not in args.keys():
                     args[i] = get_operand_value(e,1)
-                    #print("[ida_helper] Found argument %d: 0x%x (2)" % (i, args[i]))
+                    #logmsg("Found argument %d: 0x%x (2)" % (i, args[i]))
         for i in range(len(arg_instructions_3)):
             if arg_instructions_3[i] in GetDisasm(e):
-                #print("[ida_helper] Matches '%s'" % arg_instructions_3[i])
+                #logmsg("Matches '%s'" % arg_instructions_3[i])
                 if i not in args.keys():
                     register = print_operand(e, 1)
-                    #print("[ida_helper] Argument %d based on register %s..." % (i, register))
+                    #logmsg("Argument %d based on register %s..." % (i, register))
                     value = get_register_value(e, register)
                     if value != None:
                         args[i] = value
-                        #print("[ida_helper] Found argument %d: 0x%x (3)" % (i, args[i]))
+                        #logmsg("Found argument %d: 0x%x (3)" % (i, args[i]))
         e = prev_head(e)
         count += 1
     return args
@@ -364,7 +373,7 @@ def get_call_arguments_3(e = get_screen_ea(), count_max = 5):
     # are we a call instruction?
     mnem = print_insn_mnem(e)
     if mnem != "call" and mnem != "jmp":
-        print("[ida_helper] Error: not a call instruction at 0x%x" % e)
+        logmsg("Error: not a call instruction at 0x%x" % e)
         return None
 
     # Parse something like:
@@ -378,7 +387,7 @@ def get_call_arguments_3(e = get_screen_ea(), count_max = 5):
     count = 0
     # we only supports 10 instructions backwards looking for arguments
     while count <= count_max:
-        #print("[ida_helper] '%s'" % GetDisasm(e))
+        #logmsg("'%s'" % GetDisasm(e))
         # arguments are pushed in reverse order so we get the last arg first
         if "push " in GetDisasm(e):
             args_tmp.append(get_operand_value(e,0))
@@ -396,7 +405,7 @@ def get_call_arguments_2(e = get_screen_ea(), count_max = 10):
     # are we a call instruction?
     mnem = print_insn_mnem(e)
     if mnem != "call" and mnem != "jmp":
-        print("[ida_helper] Error: not a call instruction at 0x%x" % e)
+        logmsg("Error: not a call instruction at 0x%x" % e)
         return None
 
     # we hardcode the instructions that we are looking for i.e. we don't look
@@ -408,7 +417,7 @@ def get_call_arguments_2(e = get_screen_ea(), count_max = 10):
     count = 0
     # we only supports 10 instructions backwards looking for arguments
     while count <= count_max:
-        #print("[ida_helper] '%s'" % GetDisasm(e))
+        #logmsg("'%s'" % GetDisasm(e))
         if GetDisasm(e).startswith("mov     [esp"):
             # o_phrase = 3  # Memory Ref [Base Reg + Index Reg] phrase
             if get_operand_type(e,0) == o_phrase:
@@ -429,7 +438,7 @@ def get_call_arguments_2(e = get_screen_ea(), count_max = 10):
                         # later with the same offset, we ignore it
                         if i not in args.keys():
                             args[i] = get_operand_value(e,1)
-                            #print("[ida_helper] Found argument %d: 0x%x" % (i, args[i]))
+                            #logmsg("Found argument %d: 0x%x" % (i, args[i]))
         e = prev_head(e)
         count += 1
     return args
@@ -442,7 +451,7 @@ def get_call_arguments_x64(e = get_screen_ea(), count_max = 10):
     # are we a call instruction?
     mnem = print_insn_mnem(e)
     if mnem != "call" and mnem != "jmp":
-        print("[ida_helper] Error: not a call instruction at 0x%x" % e)
+        logmsg("Error: not a call instruction at 0x%x" % e)
         return None
 
     # we only supports 6 arguments
@@ -475,9 +484,9 @@ def get_call_arguments_x64(e = get_screen_ea(), count_max = 10):
     count = 0
     # we only supports 10 instructions backwards looking for arguments
     while count <= count_max:
-        #print("[ida_helper] '%s'" % GetDisasm(e))
+        #logmsg("'%s'" % GetDisasm(e))
         for i in range(len(arg_instructions_x86)):
-            #print("[ida_helper] '%s'" % arg_instructions_x86[i])
+            #logmsg("'%s'" % arg_instructions_x86[i])
             if arg_instructions_x86[i] in GetDisasm(e) or \
                arg_instructions_x86_lea[i] in GetDisasm(e) or \
                arg_instructions_x64[i] in GetDisasm(e) or \
@@ -487,7 +496,7 @@ def get_call_arguments_x64(e = get_screen_ea(), count_max = 10):
                 # If we encounter another instruction with "mov reg" later with the same offset, we ignore it
                 if i not in args.keys():
                     args[i] = get_operand_value(e,1)
-                    #print("[ida_helper] Found argument %d: 0x%x" % (i, args[i]))
+                    #logmsg("Found argument %d: 0x%x" % (i, args[i]))
         e = prev_head(e)
         count += 1
     return args
@@ -500,7 +509,7 @@ def get_call_arguments_arm(e=get_screen_ea(), count_max=10):
     # are we a BL instruction?
     mnem = print_insn_mnem(e)
     if mnem != "BL" and mnem != "SVC" and mnem != "BLNE" and mnem != "BLHI" and mnem != "BLEQ":
-        print("[ida_helper] Error: not a BL or SVC or BLNE or BLHI or BLEQ instruction at 0x%x" % e)
+        logmsg("Error: not a BL or SVC or BLNE or BLHI or BLEQ instruction at 0x%x" % e)
         return None
 
     # we only supports 4 arguments
@@ -533,10 +542,10 @@ def get_call_arguments_arm(e=get_screen_ea(), count_max=10):
     count = 0
     # we only supports 10 instructions backwards looking for arguments
     while count <= count_max:
-        #print("[ida_helper] '%s'" % GetDisasm(e))
+        #logmsg("'%s'" % GetDisasm(e))
         for i in range(len(arg_instructions_arm_mov)):
-            #print("[ida_helper] '%s'" % arg_instructions_arm_mov[i])
-            #print("[ida_helper] Testing index %d" % i)
+            #logmsg("'%s'" % arg_instructions_arm_mov[i])
+            #logmsg("Testing index %d" % i)
             # First arrive, first serve
             # We suppose that the instruction closest to the call is the one giving the argument.
             # If we encounter another instruction with "MOV reg" later with the same offset, we ignore it
@@ -547,12 +556,12 @@ def get_call_arguments_arm(e=get_screen_ea(), count_max=10):
                arg_instructions_arm_adr3[i] in GetDisasm(e):
                 if i not in args.keys():
                     args[i] = get_operand_value(e,1)
-                    #print("[ida_helper] Found argument %d: 0x%x" % (i, args[i]))
+                    #logmsg("Found argument %d: 0x%x" % (i, args[i]))
             elif arg_instructions_arm_ldr[i] in GetDisasm(e):
                 if i not in args.keys():
                     addr = get_operand_value(e,1)
                     args[i] = get_wide_dword(addr)
-                    #print("[ida_helper] Found argument %d: 0x%x" % (i, args[i]))
+                    #logmsg("Found argument %d: 0x%x" % (i, args[i]))
         e = prev_head(e)
         count += 1
     return args
@@ -601,12 +610,12 @@ def rename_function_by_ascii_string_being_used(str, funcName, prevFunc=None, nex
     bytes_str = " ".join([h[i:i+2] for i in range(0, len(h), 2)])
     matches = find_all(bytes_str)
     if len(matches) != 1:
-        print("[ida_helper] ERROR: rename_function_by_ascii_string_being_used does not support multiple strings")
+        logmsg("ERROR: rename_function_by_ascii_string_being_used does not support multiple strings")
         return False
     str_addr = matches[0]
     aString = get_name(str_addr, ida_name.GN_VISIBLE)
     if not aString:
-        print("[ida_helper] ERROR: rename_function_by_ascii_string_being_used did not find any name for aString")
+        logmsg("ERROR: rename_function_by_ascii_string_being_used did not find any name for aString")
         return False
 
     return rename_function_by_aString_being_used(aString, funcName, prevFunc=prevFunc, nextFunc=nextFunc, xref_func=xref_func)
@@ -617,7 +626,7 @@ def rename_function_by_ascii_string_being_used(str, funcName, prevFunc=None, nex
 def rename_function_by_aString_being_used(aString, funcName, prevFunc=None, nextFunc=None, xref_func=MyFirstXrefTo):
     global ERROR_MINUS_1
     if MyLocByName(funcName) != None:
-        print("[ida_helper] %s already defined" % funcName)
+        logmsg("%s already defined" % funcName)
         return True
 
     addr_str = MyLocByName(aString)
@@ -631,13 +640,13 @@ def rename_function_by_aString_being_used(aString, funcName, prevFunc=None, next
         return False
     if prevFunc != None:
         for i in range(prevFunc):
-            print("[ida_helper] Going to previous function of 0x%x" % funcaddr)
+            logmsg("Going to previous function of 0x%x" % funcaddr)
             funcaddr = get_prev_func(funcaddr)
     if nextFunc != None:
         for i in range(nextFunc):
-            print("[ida_helper] Going to next function of 0x%x" % funcaddr)
+            logmsg("Going to next function of 0x%x" % funcaddr)
             funcaddr = get_next_func(funcaddr)
-    print("[ida_helper] %s = 0x%x" % (funcName, funcaddr))
+    logmsg("%s = 0x%x" % (funcName, funcaddr))
     res = MyMakeName(funcaddr, funcName)
     if res == None:
         return False
@@ -652,11 +661,11 @@ def rename_function_by_aString_being_used_with_filter(aString, funcName, prevFun
     if override_old_name:
         funcaddr = MyLocByName(funcName)
         if funcaddr != None:
-            print("[ida_helper] Removing old: %s at 0x%x" % (funcName, funcaddr))
+            logmsg("Removing old: %s at 0x%x" % (funcName, funcaddr))
             unname_function(funcaddr)
     else:
         if MyLocByName(funcName) != None:
-            print("[ida_helper] %s already defined" % funcName)
+            logmsg("%s already defined" % funcName)
             return True
 
     addr_str = MyLocByName(aString)
@@ -670,13 +679,13 @@ def rename_function_by_aString_being_used_with_filter(aString, funcName, prevFun
             continue
         if prevFunc != None:
             for i in range(prevFunc):
-                print("[ida_helper] Going to previous function of 0x%x" % funcaddr)
+                logmsg("Going to previous function of 0x%x" % funcaddr)
                 funcaddr = get_prev_func(funcaddr)
         if nextFunc != None:
             for i in range(nextFunc):
-                print("[ida_helper] Going to next function of 0x%x" % funcaddr)
+                logmsg("Going to next function of 0x%x" % funcaddr)
                 funcaddr = get_next_func(funcaddr)
-        print("[ida_helper] Candidate function: 0x%x == %s ?" % (funcaddr, funcName))
+        logmsg("Candidate function: 0x%x == %s ?" % (funcaddr, funcName))
         # Checking now if any filtered referenced string in the candidate function
         bFilter = False
         for aFilteredStr in filtered_aStrings:
@@ -690,16 +699,16 @@ def rename_function_by_aString_being_used_with_filter(aString, funcName, prevFun
             if funcaddr_filt == None:
                 continue
             if funcaddr_filt == funcaddr:
-                print("[ida_helper] This is not the right function: 0x%x == %s" % (funcaddr, aFilteredStr))
+                logmsg("This is not the right function: 0x%x == %s" % (funcaddr, aFilteredStr))
                 bFilter = True
                 break
         if not bFilter:
             break
     if bFilter:
-        print("[ida_helper] Failed to find the right function")
+        logmsg("Failed to find the right function")
         return False
 
-    print("[ida_helper] %s = 0x%x" % (funcName, funcaddr))
+    logmsg("%s = 0x%x" % (funcName, funcaddr))
     res = MyMakeName(funcaddr, funcName)
     if res == None:
         return False
@@ -717,12 +726,12 @@ def rename_function_by_ascii_surrounding_call(str, funcName, xref_func=MyFirstXr
     bytes_str = " ".join([h[i:i+2] for i in range(0, len(h), 2)])
     matches = find_all(bytes_str)
     if len(matches) != 1:
-        print("[ida_helper] ERROR: rename_function_by_ascii_surrounding_call does not support multiple strings")
+        logmsg("ERROR: rename_function_by_ascii_surrounding_call does not support multiple strings")
         return False
     str_addr = matches[0]
     aString = get_name(str_addr, ida_name.GN_VISIBLE)
     if not aString:
-        print("[ida_helper] ERROR: rename_function_by_ascii_surrounding_call did not find any name for aString")
+        logmsg("ERROR: rename_function_by_ascii_surrounding_call did not find any name for aString")
         return False
 
     return rename_function_by_aString_surrounding_call(aString, funcName, xref_func=xref_func, count_max=count_max, filtered_funcs=filtered_funcs, count_filtered_funcs=count_filtered_funcs, head_func=head_func)
@@ -734,17 +743,17 @@ def rename_function_by_ascii_surrounding_call(str, funcName, xref_func=MyFirstXr
 def rename_function_by_aString_surrounding_call(aString, funcName, xref_func=MyFirstXrefTo, count_max=10, filtered_funcs=[], count_filtered_funcs=0, head_func=prev_head):
     global ERROR_MINUS_1
     if MyLocByName(funcName) != None:
-        print("[ida_helper] %s already defined" % funcName)
+        logmsg("%s already defined" % funcName)
         return True
 
     if filtered_funcs and count_filtered_funcs > 0:
-        print("[ida_helper] ERROR: Only one argument is supported")
+        logmsg("ERROR: Only one argument is supported")
         return False
 
     # required functions to locate funcName
     for filtered_name in filtered_funcs:
         if MyLocByName(filtered_name) == None:
-            print("[ida_helper] required function: %s missing, can't locate %s" % (filtered_name, funcName))
+            logmsg("required function: %s missing, can't locate %s" % (filtered_name, funcName))
             return False
 
     addr_str = MyLocByName(aString)
@@ -756,7 +765,7 @@ def rename_function_by_aString_surrounding_call(aString, funcName, xref_func=MyF
     try:
         sark.Function(ea=addr_str_used)
     except sark.exceptions.SarkNoFunction:
-        print("[ida_helper] No function at 0x%x when handling %s" % (addr_str_used, aString))
+        logmsg("No function at 0x%x when handling %s" % (addr_str_used, aString))
         return False
 
     count = 0
@@ -769,23 +778,23 @@ def rename_function_by_aString_surrounding_call(aString, funcName, xref_func=MyF
         try:
             insn = line.insn
         except sark.exceptions.SarkNoInstruction:
-            print("[ida_helper] data in the middle of instructions at 0x%x, not supported yet" % e)
+            logmsg("data in the middle of instructions at 0x%x, not supported yet" % e)
             return False
         if insn.mnem == "BL":
             if len(insn.operands) != 1:
-                print("[ida_helper] Wrong number of operands for BL at 0x%x" % e)
+                logmsg("Wrong number of operands for BL at 0x%x" % e)
                 return False
             curr_func_name = insn.operands[0].text
             # do we need to skip this "BL" or are we done?
             bFiltered = False
             if count_filtered_funcs > 0:
-                print("[ida_helper] skipping filtered due to count: %d at 0x%x" % (count_filtered_funcs, e))
+                logmsg("skipping filtered due to count: %d at 0x%x" % (count_filtered_funcs, e))
                 count_filtered_funcs -= 1
                 bFiltered = True
             else:
                 for filtered_name in filtered_funcs:
                     if curr_func_name == filtered_name:
-                        print("[ida_helper] skipping filtered name: %s at 0x%x" % (filtered_name, e))
+                        logmsg("skipping filtered name: %s at 0x%x" % (filtered_name, e))
                         bFiltered = True
                         break
             if bFiltered:
@@ -795,12 +804,12 @@ def rename_function_by_aString_surrounding_call(aString, funcName, xref_func=MyF
             if func_addr == None:
                 return False
             MyMakeName(func_addr, funcName)
-            print("[ida_helper] %s = 0x%x" % (funcName, func_addr))
+            logmsg("%s = 0x%x" % (funcName, func_addr))
             bFound = True
             break
         count += 1
     if not bFound:
-        print("[ida_helper] ERROR: %s not found" % funcName)
+        logmsg("ERROR: %s not found" % funcName)
         return False
     return True
 
@@ -815,13 +824,13 @@ def find_first_pointer_backwards(e, seg_info, count_max=10):
     # we only supports 10 addresses backwards
     while count <= count_max:
         addr = get_wide_dword(e)
-        #print("[ida_helper] %x" % addr)
+        #logmsg("%x" % addr)
         if not addr_is_in_one_segment(addr, seg_info):
             break
         e -= SIZE_POINTER
         count += 1
     if count > count_max:
-        print("[ida_helper] Error: find_first_pointer_backwards: failed to get the first pointer for: 0x%x" % e)
+        logmsg("Error: find_first_pointer_backwards: failed to get the first pointer for: 0x%x" % e)
         return False
     # we found a value not from a segment. The right values are the next one.
     e += SIZE_POINTER
@@ -856,7 +865,7 @@ def get_idb_name():
         return idbname[:-4]
     return idbname
 
-print("[ida_helper] loaded")
+logmsg("loaded")
 
 if __name__ == "__main__":
     args = get_call_arguments(e=get_screen_ea())
