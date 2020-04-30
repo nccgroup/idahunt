@@ -626,7 +626,7 @@ def rename_function_by_aString_being_used(aString, funcName, prevFunc=None, next
     addr_str_used = xref_func(addr_str)
     if addr_str_used == None:
         return False
-    funcaddr = MyGetFuncStartEA(addr_str_used)
+    funcaddr = get_function_addr(addr_str_used)
     if funcaddr == None:
         return False
     if prevFunc != None:
@@ -665,7 +665,7 @@ def rename_function_by_aString_being_used_with_filter(aString, funcName, prevFun
     for addr_str_used in get_xrefs(addr_str):
         if addr_str_used == None:
             continue
-        funcaddr = MyGetFuncStartEA(addr_str_used)
+        funcaddr = get_function_addr(addr_str_used)
         if funcaddr == None:
             continue
         if prevFunc != None:
@@ -686,7 +686,7 @@ def rename_function_by_aString_being_used_with_filter(aString, funcName, prevFun
             addr_filt_str_used = first_xref(addr_filt_str)
             if addr_filt_str_used == None:
                 continue
-            funcaddr_filt = MyGetFuncStartEA(addr_filt_str_used)
+            funcaddr_filt = get_function_addr(addr_filt_str_used)
             if funcaddr_filt == None:
                 continue
             if funcaddr_filt == funcaddr:
