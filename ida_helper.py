@@ -48,7 +48,7 @@ def get_xrefs(ea = get_screen_ea()):
     return res
 
 # Gives the current function's name an address is part of
-def get_current_function(ea = get_screen_ea()):
+def get_function_name(ea = get_screen_ea()):
     func = idaapi.get_func(ea)
     funcname = get_func_name(func.start_ea)
     #logmsg("%X is in %s" % (ea, funcname))
@@ -57,8 +57,9 @@ def get_current_function(ea = get_screen_ea()):
 # Gives the current function's address an address is part of
 def get_function_addr(ea = get_screen_ea()):
     func = idaapi.get_func(ea)
-    if func == None:
-        return func
+    if not func:
+        logmsg("Error: get_function_addr: Failed to find function start for 0x%x" % ea)
+        return None
     return func.start_ea
 
 # Renames an address with a name (and append a digit at the end if already
@@ -77,14 +78,13 @@ def rename_function(e, funcname):
             return False
     return True
 
-def uname_whatever(e):
+# Remove name for a function (most likely to have sub_XXXXXXXX back after that)
+def unname_address(e):
     if not set_name(e, "", SN_CHECK):
-        logmsg("Error: uname_whatever: could not remove name for element")
+        logmsg("Error: unname_address: could not remove name for element")
         return False
     return True
-
-# Remove name for a function (most likely to have sub_XXXXXXXX back after that)
-unname_function = uname_whatever
+unname_function = unname_address
 
 # Retrieve a list with all the idbs' segments' names
 def get_segments():
@@ -126,85 +126,76 @@ def addr_is_in_one_segment(addr, seg_info):
             return True
     return False
 
-def NameToRVA(s):
+def name_to_rva(s):
     addr = get_name_ea_simple(s)
     if addr == ERROR_MINUS_1:
-        logmsg("Error: NameToRVA: Failed to find '%s' symbol" % s)
+        logmsg("Error: name_to_rva: Failed to find '%s' symbol" % s)
         return None
     logmsg("image base 0x%x" % idaapi.get_imagebase())
     return addr - idaapi.get_imagebase()
 
-
 # Returns the address of any name: function, label, global, etc.
-def MyLocByName(s):
+def name_to_addr(s):
     addr = get_name_ea_simple(s)
     if addr == ERROR_MINUS_1:
-        logmsg("Error: MyLocByName: Failed to find '%s' symbol" % s)
+        logmsg("Error: name_to_addr: Failed to find '%s' symbol" % s)
         return None
     return addr
 
 # Gives the first Xref
-def MyFirstXrefTo(addr):
+def first_xref(addr):
     for e in XrefsTo(addr):
         addr = e.frm
         return addr
-    logmsg("Error: MyFirstXrefTo: Failed to find xref for 0x%x" % addr)
+    logmsg("Error: first_xref: Failed to find xref for 0x%x" % addr)
     return None
 
 # Gives the first Xref of first Xref to an address
-def MyFirstXrefOfFirstXrefTo(addr):
+def first_xref_of_first_xref(addr):
     for e in XrefsTo(addr):
         addr = e.frm
         for e in XrefsTo(addr):
             addr = e.frm
             return addr
-    logmsg("Error: MyFirstXrefOfFirstXrefTo: Failed to find xref for 0x%x" % addr)
+    logmsg("Error: first_xref_of_first_xref: Failed to find xref for 0x%x" % addr)
     return None
 
 # Gives the second Xref
-def MySecondXrefTo(addr):
+def second_xref(addr):
     i = 1
     for e in XrefsTo(addr):
         frm = e.frm
         if i == 2:
             return frm
         i += 1
-    logmsg("Error: MySecondXrefTo: Failed to find xref for 0x%x" % addr)
+    logmsg("Error: second_xref: Failed to find xref for 0x%x" % addr)
     return None
 
 # Gives the third Xref
-def MyThirdXrefTo(addr):
+def third_xref(addr):
     i = 1
     for e in XrefsTo(addr):
         frm = e.frm
         if i == 3:
             return frm
         i += 1
-    logmsg("Error: MyThirdXrefTo: Failed to find xref for 0x%x" % addr)
+    logmsg("Error: third_xref: Failed to find xref for 0x%x" % addr)
     return None
 
 # Gives the last Xref
-def MyLastXrefTo(addr):
+def last_xref(addr):
     frm = None
     for e in XrefsTo(addr):
         frm = e.frm
         #print("0x%x" % frm)
     if frm == None:
-        logmsg("Error: MyLastXrefTo: Failed to find xref for 0x%x" % addr)
+        logmsg("Error: last_xref: Failed to find xref for 0x%x" % addr)
     return frm
 
-# Gives the current function's address an address is part of
-def MyGetFuncStartEA(ea):
-    func = idaapi.get_func(ea)
-    if not func:
-        logmsg("Error: MyGetFuncStartEA: Failed to find function start for 0x%x" % ea)
-        return None
-    return func.start_ea
-
 # Rename a function
-def MyMakeName(e, funcname):
+def rename_address(e, funcname):
     if not set_name(e, funcname, SN_CHECK):
-        logmsg("Error: MyMakeName: Impossible to rename 0x%x with %s" % (e, funcname))
+        logmsg("Error: rename_address: Impossible to rename 0x%x with %s" % (e, funcname))
         return None
     return "OK"
 
@@ -604,7 +595,7 @@ def find_all(bytes_str):
 # a sequence of characters to look for in order to find the right
 # aString
 # Note: str can be null terminated or not, or have any byte value
-def rename_function_by_ascii_string_being_used(str, funcName, prevFunc=None, nextFunc=None, xref_func=MyFirstXrefTo):
+def rename_function_by_ascii_string_being_used(str, funcName, prevFunc=None, nextFunc=None, xref_func=first_xref):
 
     h = binascii.hexlify(str)
     bytes_str = " ".join([h[i:i+2] for i in range(0, len(h), 2)])
@@ -623,13 +614,13 @@ def rename_function_by_ascii_string_being_used(str, funcName, prevFunc=None, nex
 # Uses an IDA string label (aString) to find a function and rename it (funcName)
 # It uses Xrefs to this string label to locate one function and optionally
 # functions surrounding the located function to rename the function
-def rename_function_by_aString_being_used(aString, funcName, prevFunc=None, nextFunc=None, xref_func=MyFirstXrefTo):
+def rename_function_by_aString_being_used(aString, funcName, prevFunc=None, nextFunc=None, xref_func=first_xref):
     global ERROR_MINUS_1
-    if MyLocByName(funcName) != None:
+    if name_to_addr(funcName) != None:
         logmsg("%s already defined" % funcName)
         return True
 
-    addr_str = MyLocByName(aString)
+    addr_str = name_to_addr(aString)
     if addr_str == None:
         return False
     addr_str_used = xref_func(addr_str)
@@ -647,7 +638,7 @@ def rename_function_by_aString_being_used(aString, funcName, prevFunc=None, next
             logmsg("Going to next function of 0x%x" % funcaddr)
             funcaddr = get_next_func(funcaddr)
     logmsg("%s = 0x%x" % (funcName, funcaddr))
-    res = MyMakeName(funcaddr, funcName)
+    res = rename_address(funcaddr, funcName)
     if res == None:
         return False
     return True
@@ -659,16 +650,16 @@ def rename_function_by_aString_being_used_with_filter(aString, funcName, prevFun
     global ERROR_MINUS_1
 
     if override_old_name:
-        funcaddr = MyLocByName(funcName)
+        funcaddr = name_to_addr(funcName)
         if funcaddr != None:
             logmsg("Removing old: %s at 0x%x" % (funcName, funcaddr))
             unname_function(funcaddr)
     else:
-        if MyLocByName(funcName) != None:
+        if name_to_addr(funcName) != None:
             logmsg("%s already defined" % funcName)
             return True
 
-    addr_str = MyLocByName(aString)
+    addr_str = name_to_addr(aString)
     if addr_str == None:
         return False
     for addr_str_used in get_xrefs(addr_str):
@@ -689,10 +680,10 @@ def rename_function_by_aString_being_used_with_filter(aString, funcName, prevFun
         # Checking now if any filtered referenced string in the candidate function
         bFilter = False
         for aFilteredStr in filtered_aStrings:
-            addr_filt_str = MyLocByName(aFilteredStr)
+            addr_filt_str = name_to_addr(aFilteredStr)
             if addr_filt_str == None:
                 continue
-            addr_filt_str_used = MyFirstXrefTo(addr_filt_str)
+            addr_filt_str_used = first_xref(addr_filt_str)
             if addr_filt_str_used == None:
                 continue
             funcaddr_filt = MyGetFuncStartEA(addr_filt_str_used)
@@ -709,7 +700,7 @@ def rename_function_by_aString_being_used_with_filter(aString, funcName, prevFun
         return False
 
     logmsg("%s = 0x%x" % (funcName, funcaddr))
-    res = MyMakeName(funcaddr, funcName)
+    res = rename_address(funcaddr, funcName)
     if res == None:
         return False
     return True
@@ -720,7 +711,7 @@ def rename_function_by_aString_being_used_with_filter(aString, funcName, prevFun
 # a sequence of characters to look for in order to find the right
 # aString
 # Note: str can be null terminated or not, or have any byte value
-def rename_function_by_ascii_surrounding_call(str, funcName, xref_func=MyFirstXrefTo, count_max=10, filtered_funcs=[], count_filtered_funcs=0, head_func=prev_head):
+def rename_function_by_ascii_surrounding_call(str, funcName, xref_func=first_xref, count_max=10, filtered_funcs=[], count_filtered_funcs=0, head_func=prev_head):
 
     h = binascii.hexlify(str)
     bytes_str = " ".join([h[i:i+2] for i in range(0, len(h), 2)])
@@ -740,9 +731,9 @@ def rename_function_by_ascii_surrounding_call(str, funcName, xref_func=MyFirstXr
 # Uses an IDA string label (aString) to find a function and then list all instructions
 # backwards looking for ARM Branch With Link instruction "BL". And rename the function
 # part of the BL instruction.
-def rename_function_by_aString_surrounding_call(aString, funcName, xref_func=MyFirstXrefTo, count_max=10, filtered_funcs=[], count_filtered_funcs=0, head_func=prev_head):
+def rename_function_by_aString_surrounding_call(aString, funcName, xref_func=first_xref, count_max=10, filtered_funcs=[], count_filtered_funcs=0, head_func=prev_head):
     global ERROR_MINUS_1
-    if MyLocByName(funcName) != None:
+    if name_to_addr(funcName) != None:
         logmsg("%s already defined" % funcName)
         return True
 
@@ -752,11 +743,11 @@ def rename_function_by_aString_surrounding_call(aString, funcName, xref_func=MyF
 
     # required functions to locate funcName
     for filtered_name in filtered_funcs:
-        if MyLocByName(filtered_name) == None:
+        if name_to_addr(filtered_name) == None:
             logmsg("required function: %s missing, can't locate %s" % (filtered_name, funcName))
             return False
 
-    addr_str = MyLocByName(aString)
+    addr_str = name_to_addr(aString)
     if addr_str == None:
         return False
     addr_str_used = xref_func(addr_str)
@@ -800,10 +791,10 @@ def rename_function_by_aString_surrounding_call(aString, funcName, xref_func=MyF
             if bFiltered:
                 count +=1
                 continue
-            func_addr = MyLocByName(curr_func_name)
+            func_addr = name_to_addr(curr_func_name)
             if func_addr == None:
                 return False
-            MyMakeName(func_addr, funcName)
+            rename_address(func_addr, funcName)
             logmsg("%s = 0x%x" % (funcName, func_addr))
             bFound = True
             break
@@ -864,6 +855,19 @@ def get_idb_name():
     if idbname.endswith(".i64"):
         return idbname[:-4]
     return idbname
+
+# Old exported names, to be deprecated
+get_current_function = get_function_name
+MyGetFuncStartEA = get_function_addr
+uname_whatever = unname_address
+NameToRVA = name_to_rva
+MyLocByName = name_to_addr
+MyFirstXrefTo = first_xref
+MyFirstXrefOfFirstXrefTo = first_xref_of_first_xref
+MySecondXrefTo = second_xref
+MyThirdXrefTo = third_xref
+MyLastXrefTo = last_xref
+MyMakeName = rename_address
 
 logmsg("loaded")
 
