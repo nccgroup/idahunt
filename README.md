@@ -1,31 +1,33 @@
 # idahunt
 
 **idahunt** is a framework to analyze binaries with IDA Pro and hunt for things
-in IDA Pro. It contains a main command line tool to analyse all executable files
-recursively from a given folder. It executes in the background so you don't have
+in IDA Pro. It is command line tool to analyse all executable files
+recursively from a given folder. It executes IDA in the background so you don't have
 to open manually each file. It supports executing external IDA Python scripts.
 
 ## Requirements
 
-* Python3 only (except IDA Python scripts which are Python2 based)
+* Python3 only (except IDA Python scripts which can be Python2/Python3 depending on your IDA setup)
 * IDA Pro
 * Windows, Linux, OS X
 
 ## Features
 
 * Automate creation of IDBs for multiple executables
-* Open multiple existing IDBs
 * Execute IDA Python scripts across multiple executables
-* IDA Python helpers to simplify looking for things in IDA. You can use this
-  to easily build your own IDA Python scripts
-* It supports any file format IDA would support (PE/ELF/MACH-O/etc.)
+* Open multiple existing IDBs
+* Support any binary format (raw assembly/PE/ELF/MACH-O/etc.) supported by IDA
+* (Optional) Include IDA Python helpers. You can use these
+  to easily build your own IDA Python scripts or you can use any other IDA Python library like
+  [sark](https://sark.readthedocs.io/en/latest/) or [bip](https://github.com/synacktiv/bip)
+  to name a few
 
 Useful examples include (non-exhaustive list):
 
 * Analyse Microsoft Patch Tuesday updates
 * Analyse malware of the same family
-* Analyse multiple versions of the same software (router/firewall/etc.)
-* Analyse a bunch of binaries (UEFI, etc.)
+* Analyse multiple versions of the same software
+* Analyse a bunch of binaries (UEFI, HP iLO, Cisco IOS router, Cisco ASA firewall, etc.)
 
 ## Scripting
 
@@ -36,27 +38,33 @@ Python script or build your own. Some examples:
 * Decrypt strings (e.g. malware)
 * Hunt for the same symbol across multiple versions (using heuristics)
 * Hunt for ROP gadgets
+* Port reversed function names / symbols from one version to another using tools like [diaphora](https://github.com/joxeankoret/diaphora)
 * Etc.
 
 # Usage
 
 * `idahunt.py`: main tool to analyse executable files
-* `filters/names.py`: contains a basic filter based on name and/or extension to
-                      decide which files in an input dir to analyze with ida
+* `filters/`: contains basic filters to decide which fiels in an input dir to analyze with IDA
+    * `filters/default.py`: default basic filter not filtering anything and used by default
+    * `filters/ciscoasa.py`: useful for analyzing Cisco ASA Firewall images
+    * `filters/hpilo.py`: useful for analyzing HP iLO images
+    * `filters/names.py`: basic filter based on name, name length or extension 
 * `script_template.py`: contains a `hello world` IDA Python script
 
 ```
-C:\idahunt>idahunt.py -h
+C:\idahunt> C:\Python37-x64\python.exe .\idahunt.py -h
 usage: idahunt.py [-h] [--inputdir INPUTDIR] [--analyse] [--open]
-                  [--scripts SCRIPTS [SCRIPTS ...]] [--filter FILTER]
-                  [--cleanup] [--temp-cleanup] [--verbose] [--max-ida MAX_IDA]
-                  [--list-only]
+                  [--ida-args IDA_ARGS] [--scripts SCRIPTS [SCRIPTS ...]]
+                  [--filter FILTER] [--cleanup] [--temp-cleanup] [--verbose]
+                  [--max-ida MAX_IDA] [--list-only] [--version IDA_VERSION]
 
 optional arguments:
   -h, --help            show this help message and exit
   --inputdir INPUTDIR   Input folder to search for files
-  --analyse             analyse all files i.e. create .idb for all of them
+  --analyse, --analyze  analyse all files i.e. create .idb for all of them
   --open                open all files into IDA (debug only)
+  --ida-args IDA_ARGS   Additional arguments to pass to IDA (e.g.
+                        -p<processor> -i<entry_point> -b<load_addr>)
   --scripts SCRIPTS [SCRIPTS ...]
                         List of IDA Python scripts to execute in this order
   --filter FILTER       External python script with optional arguments
@@ -64,12 +72,16 @@ optional arguments:
                         analyse. See filters/names.py for example
   --cleanup             Cleanup i.e. remove .asm files that we don't need
   --temp-cleanup        Cleanup temporary database files i.e. remove .id0,
-                        .id1, .id2, .nama files if IDA Pro crashed and did not
-                        delete them
+                        .id1, .id2, .nam, .dmp files if IDA Pro crashed and
+                        did not delete them
   --verbose             be more verbose to debug script
   --max-ida MAX_IDA     Maximum number of instances of IDA to run at a time
+                        (default: 10)
   --list-only           List only what files would be handled without
                         executing IDA
+  --version IDA_VERSION
+                        Override IDA version (e.g. "7.5"). This is used to
+                        find the path of IDA on Windows.
 ```
 
 ## Simulate without executing
@@ -189,6 +201,14 @@ C:\idahunt>idahunt.py --inputdir C:\re --filter "filters\names.py -a 32 -v -e dl
 
 ## Architecture needs to be provided
 
+The architecture is required to know in advance due to a limitation of IDA
+Pro that contains 2 different executables `idaq.exe` and `idaq64.exe` to analyse
+binaries of the two architectures 32-bit and 64-bit.
+
+idahunt will automatically detect i386, ia64 and amd64 architectures in Windows PE files.
+If you need to automatically detect other architectures, you can create an issue or add it 
+to idahunt and do a PR.
+
 If you forget to provide the architecture of the files you want to analyse, the
 basic `filters\names.py` will return an error:
 
@@ -201,13 +221,6 @@ C:\idahunt>idahunt.py --inputdir C:\re --filter "filters\names.py -v -e dll" --s
 [names] Skipping non-matching extension .dll in DownloadExecute.exe
 [names] Skipping non-matching extension .dll in ReverseShell.exe
 ```
-
-Protip: you could build your own filter that would detect the architecture
-automatically using a win32, elf library.
-
-Note: The architecture is required to know in advance due to a limitation of IDA
-Pro that contains 2 different executables `idaq.exe` and `idaq64.exe` to analyse
-binaries of the two architectures 32-bit and 64-bit.
 
 # Known projects using idahunt
 

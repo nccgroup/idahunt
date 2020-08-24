@@ -8,7 +8,7 @@
 # functions/globals/etc. in several IDBs, open several IDBs or
 # hunt for what you want in several IDBs using an IDA Python script.
 #
-# Tested under windows and linux.
+# Tested under Windows and Linux.
 #
 # IDA command line switches:
 # https://www.hex-rays.com/products/ida/support/idadoc/417.shtml
@@ -72,8 +72,7 @@ def detect_arch_pe_files(filename):
             arch = 64
         else:
             arch = None
-            logmsg("Unknown architecture detected")
-            sys.exit(1)
+            logmsg("Unknown architecture detected for %s. Ignoring" % filename)
         f.close()
     return arch
 
@@ -222,7 +221,8 @@ def do_dir(inputdir, filter, verbose, max_ida, do_file, ida_args=None, script=No
 
             if arch == "auto":
                 arch = detect_arch_pe_files(f)
-
+                if arch == None:
+                    continue
             if arch == 32:
                 ida_executable = IDA32
                 idbfile = f_noext + ".idb"
@@ -299,7 +299,7 @@ if __name__ == "__main__":
                         help='Additional arguments to pass to IDA (e.g. -p<processor> -i<entry_point> -b<load_addr>)')
     parser.add_argument('--scripts', dest='scripts', nargs="+", default=None,
                         help='List of IDA Python scripts to execute in this order')
-    parser.add_argument('--filter', dest='filter', default=None,
+    parser.add_argument('--filter', dest='filter', default="filters/default.py",
                         help='External python script with optional arguments \
                         defining a filter for the names of the files to \
                         analyse. See filters/names.py for example')
@@ -316,8 +316,8 @@ if __name__ == "__main__":
                         help='Maximum number of instances of IDA to run at a time (default: 10)')
     parser.add_argument('--list-only', dest='list_only', default=False, action="store_true",
                         help='List only what files would be handled without executing IDA')
-    parser.add_argument('--version', dest='ida_version', default="7.4",
-                        help='Override IDA version (e.g. "7.4"). This is used to find the path \
+    parser.add_argument('--version', dest='ida_version', default="7.5",
+                        help='Override IDA version (e.g. "7.5"). This is used to find the path \
                         of IDA on Windows.')
     args = parser.parse_args()
 
@@ -351,7 +351,8 @@ if __name__ == "__main__":
                     pass
         else:
             #IDA32="C:\\Program Files (x86)\\IDA 6.95\\idaq.exe"
-            IDA32="C:\\Program Files\\IDA " + ida_version + "\\ida.exe"
+            #IDA32="C:\\Program Files\\IDA " + ida_version + "\\ida.exe"
+            IDA32="C:\\Program Files\\IDA Pro " + ida_version + "\\ida.exe"
             # XXX - Test the file exists here... We shouldn't rely on a version
             ida32_found = True
 
@@ -375,7 +376,8 @@ if __name__ == "__main__":
                     pass
         else:
             #IDA64="C:\\Program Files (x86)\\IDA 6.95\\idaq64.exe"
-            IDA64="C:\\Program Files\\IDA " + ida_version + "\\ida64.exe"
+            #IDA64="C:\\Program Files\\IDA " + ida_version + "\\ida64.exe"
+            IDA64="C:\\Program Files\\IDA Pro " + ida_version + "\\ida64.exe"
             # XXX - Test the file exists here... We shouldn't rely on a version
             ida64_found = True
 

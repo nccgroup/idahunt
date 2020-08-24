@@ -6,6 +6,7 @@
 #
 # Filter for arbitrary names to be used by idahunt.py command line:
 # e.g. idahunt.py --filter "filters/names.py -n Download -e exe -a 32"
+#      idahunt.py --filter "filters/names.py -l 64"
 
 import argparse
 import os
@@ -26,7 +27,7 @@ def logmsg(s, end=None, debug=True):
         print(s)
 
 # do we actually treat it?
-def filter(f, name, extension, arch, verbose=True):
+def filter(f, name, extension, arch, length, verbose=True):
     if name and not name in os.path.basename(f):
         logmsg("Skipping non-matching name %s in %s" % (name, os.path.basename(f)))
         return None
@@ -38,6 +39,9 @@ def filter(f, name, extension, arch, verbose=True):
         return None
     if name and not name in os.path.basename(f):
         logmsg("Skipping non-matching name %s in %s" % (name, os.path.basename(f)))
+        return None
+    if length and len(os.path.basename(f)) != length:
+        logmsg("Skipping non-matching name: len(%s) != %d" % (os.path.basename(f), length))
         return None
 
     if arch == "64":
@@ -63,8 +67,10 @@ def main(f, cmdline):
                         extension to match')
     parser.add_argument('-a', dest='arch', default=None, help='Assume \
                          architecture known by user')
+    parser.add_argument('-l', dest='length', default=None, type=int, help='Name length \
+                         to include (e.g. 64 for a SHA256 since it is 32 bytes stored in hex digits)')
     parser.add_argument('-v', dest='verbose', default=False, action='store_true'
                         , help='be more verbose to debug script')
     args = parser.parse_args()
 
-    return filter(f, args.name, args.extension, args.arch, args.verbose)
+    return filter(f, args.name, args.extension, args.arch, args.length, args.verbose)
