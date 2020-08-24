@@ -13,6 +13,7 @@ to open manually each file. It supports executing external IDA Python scripts.
 
 ## Features
 
+* Specify how many instances of IDA you want to run simultaneously
 * Automate creation of IDBs for multiple executables
 * Execute IDA Python scripts across multiple executables
 * Open multiple existing IDBs
