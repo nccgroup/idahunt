@@ -49,9 +49,11 @@ def path_to_module_string(p):
 
 # Automatically detects the architecture for PE files
 def detect_arch_pe_files(filename):
-    IMAGE_FILE_MACHINE_I386 = 332
-    IMAGE_FILE_MACHINE_IA64 = 512
-    IMAGE_FILE_MACHINE_AMD64 = 34404
+    IMAGE_FILE_MACHINE_I386 = 0x014c
+    IMAGE_FILE_MACHINE_IA64 = 0x0200
+    IMAGE_FILE_MACHINE_AMD64 = 0x8664
+    IMAGE_FILE_MACHINE_ARMTHUMB_MIXED = 0x01c2
+    IMAGE_FILE_MACHINE_ARM64 = 0xAA64
     arch = None
     f = open(filename, "rb")
     s = f.read(2)
@@ -64,11 +66,9 @@ def detect_arch_pe_files(filename):
         f.seek(header_offset+4)
         s = f.read(2)
         machine = struct.unpack("<H", s)[0]
-        if machine == IMAGE_FILE_MACHINE_I386:
+        if machine == IMAGE_FILE_MACHINE_I386 or machine == IMAGE_FILE_MACHINE_ARMTHUMB_MIXED:
             arch = 32
-        elif machine == IMAGE_FILE_MACHINE_IA64:
-            arch = 64
-        elif machine == IMAGE_FILE_MACHINE_AMD64:
+        elif machine == IMAGE_FILE_MACHINE_IA64 or machine == IMAGE_FILE_MACHINE_AMD64 or machine == IMAGE_FILE_MACHINE_ARM64:
             arch = 64
         else:
             arch = None
