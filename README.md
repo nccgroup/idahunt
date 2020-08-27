@@ -1,3 +1,5 @@
+![](img/banner.png)
+
 <!-- vim-markdown-toc GFM -->
 * [Overview](#overview)
   * [Requirements](#requirements)
@@ -11,8 +13,6 @@
     * [Architecture detection](#architecture-detection)
 * [Known projects using idahunt](#known-projects-using-idahunt)
 <!-- vim-markdown-toc -->
-
-![](img/banner.png)
 
 # Overview
 
