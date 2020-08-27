@@ -1,4 +1,20 @@
-# idahunt
+<!-- vim-markdown-toc GFM -->
+* [Overview](#overview)
+  * [Requirements](#requirements)
+  * [Features](#features)
+  * [Scripting](#scripting)
+* [Usage](#usage)
+  * [Simulate without executing](#simulate-without-executing)
+  * [Initial analysis](#initial-analysis)
+  * [Execute IDA Python script](#execute-ida-python-script)
+  * [Filters](#filters)
+    * [Architecture detection](#architecture-detection)
+* [Known projects using idahunt](#known-projects-using-idahunt)
+<!-- vim-markdown-toc -->
+
+![](img/banner.png)
+
+# Overview
 
 **idahunt** is a framework to analyze binaries with IDA Pro and hunt for things
 in IDA Pro. It is command line tool to analyse all executable files
@@ -170,9 +186,9 @@ Executing function 'main'...
 [script_template] I execute in IDA, yay!
 ```
 
-# Filter name
+## Filters
 
-We can filter that it only analyses files with a given pattern in the name
+We can filter that idahunt only analyses files with a given pattern in the name
 (`-n Download` below):
 
 ```
@@ -185,9 +201,7 @@ C:\idahunt>idahunt.py --inputdir C:\re --filter "filters\names.py -a 32 -v -n Do
 [names] Skipping non-matching name Download in ReverseShell.exe
 ```
 
-# Filter extension
-
-We can create a filter that tells idahunt to only analyse files with a given
+We can also filter that idahunt only analyses files with a given
 extension (`-e dll` below):
 
 ```
@@ -200,11 +214,12 @@ C:\idahunt>idahunt.py --inputdir C:\re --filter "filters\names.py -a 32 -v -e dl
 [names] Skipping non-matching extension .dll in ReverseShell.exe
 ```
 
-## Architecture needs to be provided
+### Architecture detection
 
-The architecture is required to know in advance due to a limitation of IDA
-Pro that contains 2 different executables `idaq.exe` and `idaq64.exe` to analyse
-binaries of the two architectures 32-bit and 64-bit.
+The architecture is required to know in advance due to IDA Pro architecture and the fact
+that it contains 2 different executables `idaq.exe` and `idaq64.exe` to analyse
+binaries of the two architectures 32-bit and 64-bit. This is especially true if you want to
+use the HexRays decompiler.
 
 idahunt will automatically detect i386, ia64 and amd64 architectures in Windows PE files.
 If you need to automatically detect other architectures, you can create an issue or add it 
