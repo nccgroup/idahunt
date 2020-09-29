@@ -276,7 +276,7 @@ def get_register_value(e=get_screen_ea(), register=None, count_max=20):
 # E.g.: this can be used on some logging functions where one of the argument
 #       passed to the logging function contains the caller's function name
 #       This allows renaming the caller's function automatically
-def get_call_arguments_1(e=get_screen_ea(), count_max=10):
+def get_call_arguments_x86_1(e=get_screen_ea(), count_max=10):
     return get_structure_offsets(e=e, count_max=count_max, reg="esp")
 
 # Works on both 32-bit and 64-bit
@@ -364,8 +364,8 @@ def get_structure_offsets(e=get_screen_ea(), count_max=10, reg="esp"):
         count += 1
     return args
 
-# see get_call_arguments_1
-def get_call_arguments_3(e = get_screen_ea(), count_max = 5):
+# see get_call_arguments_x86_1
+def get_call_arguments_x86_3(e = get_screen_ea(), count_max = 5):
     args = {}
 
     # are we a call instruction?
@@ -395,9 +395,9 @@ def get_call_arguments_3(e = get_screen_ea(), count_max = 5):
         args[i] = args_tmp[i]
     return args
 
-# Alternative to get_call_arguments_1(). See get_call_arguments_1() for more
+# Alternative to get_call_arguments_x86_1(). See get_call_arguments_x86_1() for more
 # information.
-def get_call_arguments_2(e = get_screen_ea(), count_max = 10):
+def get_call_arguments_x86_2(e = get_screen_ea(), count_max = 10):
     args = {}
 
     # are we a call instruction?
@@ -441,9 +441,15 @@ def get_call_arguments_2(e = get_screen_ea(), count_max = 10):
         count += 1
     return args
 
-# Similar to get_call_arguments_1() but for x86_64. See get_call_arguments_1()
+def get_call_arguments_x64_linux(e = get_screen_ea(), count_max = 10, debug=False):
+    return get_call_arguments_x64_generic(e=e, count_max=count_max, debug=debug, linux=True)
+
+def get_call_arguments_x64_windows(e = get_screen_ea(), count_max = 10, debug=False):
+    return get_call_arguments_x64_generic(e=e, count_max=count_max, debug=debug, linux=False)
+    
+# Similar to get_call_arguments_x86_1() but for x86_64. See get_call_arguments_x86_1()
 # for more information.
-def get_call_arguments_x64(e = get_screen_ea(), count_max = 10):
+def get_call_arguments_x64_generic(e = get_screen_ea(), count_max = 10, debug=False, linux=True):
     args = {}
 
     # are we a call instruction?
@@ -452,39 +458,61 @@ def get_call_arguments_x64(e = get_screen_ea(), count_max = 10):
         logmsg("Error: not a call instruction at 0x%x" % e)
         return None
 
-    # we only supports 6 arguments
-    arg_instructions_x86 = ["mov     edi",
-                            "mov     esi",
-                            "mov     edx",
-                            "mov     ecx",
-                            "mov     r8d",
-                            "mov     r9d"]
-    arg_instructions_x86_lea = ["lea     edi",
-                                "lea     esi",
-                                "lea     edx",
-                                "lea     ecx",
-                                "lea     r8d",
-                                "lea     r9d"]
-    arg_instructions_x64 = ["mov     rdi",
-                            "mov     rsi",
-                            "mov     rdx",
-                            "mov     rcx",
-                            "mov     r8",
-                            "mov     r9"]
-    arg_instructions_x64_lea = ["lea     rdi",
-                                "lea     rsi",
-                                "lea     rdx",
-                                "lea     rcx",
-                                "lea     r8",
-                                "lea     r9"]
+    # we only supports 6 arguments for Linux
+    if linux:
+        arg_instructions_x86 = ["mov     edi",
+                                "mov     esi",
+                                "mov     edx",
+                                "mov     ecx",
+                                "mov     r8d",
+                                "mov     r9d"]
+        arg_instructions_x86_lea = ["lea     edi",
+                                    "lea     esi",
+                                    "lea     edx",
+                                    "lea     ecx",
+                                    "lea     r8d",
+                                    "lea     r9d"]
+        arg_instructions_x64 = ["mov     rdi",
+                                "mov     rsi",
+                                "mov     rdx",
+                                "mov     rcx",
+                                "mov     r8",
+                                "mov     r9"]
+        arg_instructions_x64_lea = ["lea     rdi",
+                                    "lea     rsi",
+                                    "lea     rdx",
+                                    "lea     rcx",
+                                    "lea     r8",
+                                    "lea     r9"]
+    # we only supports 4 arguments for Windows
+    else:
+        arg_instructions_x86 = ["mov     ecx",
+                                "mov     edx",
+                                "mov     r8d",
+                                "mov     r9d"]
+        arg_instructions_x86_lea = ["lea     ecx",
+                                    "lea     edx",
+                                    "lea     r8d",
+                                    "lea     r9d"]
+        arg_instructions_x64 = ["mov     rcx",
+                                "mov     rdx",
+                                "mov     r8",
+                                "mov     r9"]
+        arg_instructions_x64_lea = ["lea     rcx",
+                                    "lea     rdx",
+                                    "lea     r8",
+                                    "lea     r9"]
+
     # parse arguments, parsing instructions backwards
     e = prev_head(e)
     count = 0
     # we only supports 10 instructions backwards looking for arguments
     while count <= count_max:
-        #logmsg("'%s'" % GetDisasm(e))
+        if debug:
+            logmsg("Handling '%s'" % GetDisasm(e))
         for i in range(len(arg_instructions_x86)):
-            #logmsg("'%s'" % arg_instructions_x86[i])
+            #if debug:
+            #    logmsg("'%s'" % arg_instructions_x86[i])
             if arg_instructions_x86[i] in GetDisasm(e) or \
                arg_instructions_x86_lea[i] in GetDisasm(e) or \
                arg_instructions_x64[i] in GetDisasm(e) or \
@@ -494,12 +522,13 @@ def get_call_arguments_x64(e = get_screen_ea(), count_max = 10):
                 # If we encounter another instruction with "mov reg" later with the same offset, we ignore it
                 if i not in args.keys():
                     args[i] = get_operand_value(e,1)
-                    #logmsg("Found argument %d: 0x%x" % (i, args[i]))
+                    if debug:
+                        logmsg("Found argument %d: 0x%x" % (i, args[i]))
         e = prev_head(e)
         count += 1
     return args
 
-# Similar to get_call_arguments_x64() but for ARM 32-bit. See get_call_arguments_1()
+# Similar to get_call_arguments_x64_linux() but for ARM 32-bit. See get_call_arguments_x86_1()
 # for more information.
 def get_call_arguments_arm(e=get_screen_ea(), count_max=10):
     args = {}
@@ -564,19 +593,25 @@ def get_call_arguments_arm(e=get_screen_ea(), count_max=10):
         count += 1
     return args
 
+def get_call_arguments_x86(e = get_screen_ea(), count_max = 10):
+    args = get_call_arguments_x86_1(e, count_max)
+    if not args:
+        args = get_call_arguments_x86_2(e, count_max)
+    if not args:
+        args = get_call_arguments_x86_3(e, count_max)
+    return args
+
 # Wrapper to have a generic method to get arguments for a function call
 # based on internal helpers.
 def get_call_arguments(e=get_screen_ea(), count_max=10):
     if ARCHITECTURE == 32:
-        args = get_call_arguments_1(e, count_max)
-        if not args:
-            args = get_call_arguments_2(e, count_max)
-        if not args:
-            args = get_call_arguments_3(e, count_max)
+        args = get_call_arguments_x86(e, count_max)
         if not args:
             args = get_call_arguments_arm(e, count_max)
     else:
-        args = get_call_arguments_x64(e, count_max)
+        # XXX - we could determine if it is an ELF vs PE and call the right one
+        args = get_call_arguments_x64_linux(e, count_max)
+        #args = get_call_arguments_x64_windows(e, count_max)
     return args
 
 # find all candidates matching a given binary data
@@ -875,6 +910,10 @@ MySecondXrefTo = second_xref
 MyThirdXrefTo = third_xref
 MyLastXrefTo = last_xref
 MyMakeName = rename_address
+get_call_arguments_1 = get_call_arguments_x86_1
+get_call_arguments_2 = get_call_arguments_x86_2
+get_call_arguments_3 = get_call_arguments_x86_3
+get_call_arguments_x64 = get_call_arguments_x64_generic
 
 logmsg("loaded")
 
