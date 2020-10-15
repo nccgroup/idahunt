@@ -110,7 +110,7 @@ def get_segments_info(seg_names=default_seg_names):
             continue
         res[name] = {}
         res[name]['start_ea'] = seg.start_ea
-    for n in xrange(idaapi.get_segm_qty()):
+    for n in range(idaapi.get_segm_qty()):
         seg = idaapi.getnseg(n)
         for name,d in res.items():
             if d['start_ea'] == seg.start_ea:
