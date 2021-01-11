@@ -247,10 +247,11 @@ def get_register_value(e=get_screen_ea(), register=None, count_max=20):
     e = prev_head(e)
     count = 0
     while count <= count_max:
-        #logmsg("'%s'" % GetDisasm(e))
+        disasm_line = GetDisasm(e)
+        #logmsg("'%s'" % disasm_line)
         for i in range(len(arg_instructions)):
             ins = arg_instructions[i] % register
-            if ins in GetDisasm(e):
+            if ins in disasm_line:
                 #logmsg("0x%x - Matches '%s'" % (e, ins))
                 # First arrive, first serve
                 # We suppose that the instruction closest is the
@@ -332,9 +333,10 @@ def get_structure_offsets(e=get_screen_ea(), count_max=10, reg="esp"):
     count = 0
     # we only supports 10 instructions backwards looking for arguments
     while count <= count_max:
-        #logmsg("'%s'" % GetDisasm(e))
+        disasm_line = GetDisasm(e)
+        #logmsg("'%s'" % disasm_line)
         for i in range(len(arg_instructions)):
-            if arg_instructions[i] in GetDisasm(e):
+            if arg_instructions[i] in disasm_line:
                 #logmsg("0x%x - Matches '%s'" % (e, arg_instructions[i]))
                 # First arrive, first serve
                 # We suppose that the instruction closest to the call is the
@@ -345,13 +347,13 @@ def get_structure_offsets(e=get_screen_ea(), count_max=10, reg="esp"):
                     args[i] = get_operand_value(e,1)
                     #logmsg("Found argument %d: 0x%x" % (i, args[i]))
         for i in range(len(arg_instructions_2)):
-            if arg_instructions_2[i] in GetDisasm(e):
+            if arg_instructions_2[i] in disasm_line:
                 #logmsg("Matches '%s'" % arg_instructions_2[i])
                 if i not in args.keys():
                     args[i] = get_operand_value(e,1)
                     #logmsg("Found argument %d: 0x%x (2)" % (i, args[i]))
         for i in range(len(arg_instructions_3)):
-            if arg_instructions_3[i] in GetDisasm(e):
+            if arg_instructions_3[i] in disasm_line:
                 #logmsg("Matches '%s'" % arg_instructions_3[i])
                 if i not in args.keys():
                     register = print_operand(e, 1)
@@ -385,9 +387,10 @@ def get_call_arguments_x86_3(e = get_screen_ea(), count_max = 5):
     count = 0
     # we only supports 10 instructions backwards looking for arguments
     while count <= count_max:
-        #logmsg("'%s'" % GetDisasm(e))
+        disasm_line = GetDisasm(e)
+        #logmsg("'%s'" % disasm_line)
         # arguments are pushed in reverse order so we get the last arg first
-        if "push " in GetDisasm(e):
+        if "push " in disasm_line:
             args_tmp.append(get_operand_value(e,0))
         e = prev_head(e)
         count += 1
@@ -415,8 +418,9 @@ def get_call_arguments_x86_2(e = get_screen_ea(), count_max = 10):
     count = 0
     # we only supports 10 instructions backwards looking for arguments
     while count <= count_max:
-        #logmsg("'%s'" % GetDisasm(e))
-        if GetDisasm(e).startswith("mov     [esp"):
+        disasm_line = GetDisasm(e)
+        #logmsg("'%s'" % disasm_line)
+        if disasm_line.startswith("mov     [esp"):
             # o_phrase = 3  # Memory Ref [Base Reg + Index Reg] phrase
             if get_operand_type(e,0) == o_phrase:
                 # unfortunately we can't test that there is no index register
@@ -508,15 +512,17 @@ def get_call_arguments_x64_generic(e = get_screen_ea(), count_max = 10, debug=Fa
     count = 0
     # we only supports 10 instructions backwards looking for arguments
     while count <= count_max:
+        disasm_line = GetDisasm(e)
         if debug:
-            logmsg("Handling '%s'" % GetDisasm(e))
+            logmsg("Handling '%s'" % disasm_line)
         for i in range(len(arg_instructions_x86)):
             #if debug:
             #    logmsg("'%s'" % arg_instructions_x86[i])
-            if arg_instructions_x86[i] in GetDisasm(e) or \
-               arg_instructions_x86_lea[i] in GetDisasm(e) or \
-               arg_instructions_x64[i] in GetDisasm(e) or \
-               arg_instructions_x64_lea[i] in GetDisasm(e):
+            instruction_list = [arg_instructions_x86[i],
+                                 arg_instructions_x86_lea[i],
+                                 arg_instructions_x64[i],
+                                 arg_instructions_x64_lea[i]]
+            if any(instruction in disasm_line for instruction in instruction_list):
                 # First arrive, first serve
                 # We suppose that the instruction closest to the call is the one giving the argument.
                 # If we encounter another instruction with "mov reg" later with the same offset, we ignore it
@@ -540,51 +546,53 @@ def get_call_arguments_arm(e=get_screen_ea(), count_max=10):
         return None
 
     # we only supports 4 arguments
-    arg_instructions_arm_mov = ["MOV             R0,",
-                                "MOV             R1,",
-                                "MOV             R2,",
-                                "MOV             R3,"]
-    arg_instructions_arm_adr = ["ADR             R0,",
-                                "ADR             R1,",
-                                "ADR             R2,",
-                                "ADR             R3,"]
-    arg_instructions_arm_ldr = ["LDR             R0,",
-                                "LDR             R1,",
-                                "LDR             R2,",
-                                "LDR             R3,"]
-    arg_instructions_arm_adr2 = ["ADREQ           R0,",
-                                 "ADREQ           R1,",
-                                 "ADDEQ           R2,",
-                                 "ADREQ           R3,"]
-    arg_instructions_arm_mov2 = ["MOVEQ           R0,",
-                                 "MOVEQ           R1,",
-                                 "MOVEQ           R2,",
-                                 "MOVEQ           R3,"]
-    arg_instructions_arm_adr3 = ["ADRNE           R0,",
-                                 "ADRNE           R1,",
-                                 "ADDNE           R2,",
-                                 "ADRNE           R3,"]
+    arg_instructions_arm_mov = ["MOV     R0,",
+                                "MOV     R1,",
+                                "MOV     R2,",
+                                "MOV     R3,"]
+    arg_instructions_arm_adr = ["ADR     R0,",
+                                "ADR     R1,",
+                                "ADR     R2,",
+                                "ADR     R3,"]
+    arg_instructions_arm_ldr = ["LDR     R0,",
+                                "LDR     R1,",
+                                "LDR     R2,",
+                                "LDR     R3,"]
+    arg_instructions_arm_adr2 = ["ADREQ   R0,",
+                                 "ADREQ   R1,",
+                                 "ADDEQ   R2,",
+                                 "ADREQ   R3,"]
+    arg_instructions_arm_mov2 = ["MOVEQ   R0,",
+                                 "MOVEQ   R1,",
+                                 "MOVEQ   R2,",
+                                 "MOVEQ   R3,"]
+    arg_instructions_arm_adr3 = ["ADRNE   R0,",
+                                 "ADRNE   R1,",
+                                 "ADDNE   R2,",
+                                 "ADRNE   R3,"]
     # parse arguments, parsing instructions backwards
     e = prev_head(e)
     count = 0
     # we only supports 10 instructions backwards looking for arguments
     while count <= count_max:
-        #logmsg("'%s'" % GetDisasm(e))
+        disasm_line = GetDisasm(e)
+        #logmsg("'%s'" % disasm_line)
         for i in range(len(arg_instructions_arm_mov)):
             #logmsg("'%s'" % arg_instructions_arm_mov[i])
             #logmsg("Testing index %d" % i)
             # First arrive, first serve
             # We suppose that the instruction closest to the call is the one giving the argument.
             # If we encounter another instruction with "MOV reg" later with the same offset, we ignore it
-            if arg_instructions_arm_mov[i] in GetDisasm(e) or \
-               arg_instructions_arm_mov2[i] in GetDisasm(e) or \
-               arg_instructions_arm_adr[i] in GetDisasm(e) or \
-               arg_instructions_arm_adr2[i] in GetDisasm(e) or \
-               arg_instructions_arm_adr3[i] in GetDisasm(e):
+            instruction_list = [arg_instructions_arm_mov[i],
+                                arg_instructions_arm_mov2[i],
+                                arg_instructions_arm_adr[i],
+                                arg_instructions_arm_adr[i],
+                                arg_instructions_arm_adr3[i]]
+            if any(instruction in disasm_line for instruction in instruction_list):
                 if i not in args.keys():
                     args[i] = get_operand_value(e,1)
                     #logmsg("Found argument %d: 0x%x" % (i, args[i]))
-            elif arg_instructions_arm_ldr[i] in GetDisasm(e):
+            elif arg_instructions_arm_ldr[i] in disasm_line:
                 if i not in args.keys():
                     addr = get_operand_value(e,1)
                     args[i] = get_wide_dword(addr)
