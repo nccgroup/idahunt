@@ -73,7 +73,7 @@ def detect_arch_pe_files(filename):
         else:
             arch = None
             logmsg("Unknown architecture detected for %s. Ignoring" % filename)
-        f.close()
+    f.close()
     return arch
 
 # Does the initial auto-analysis when we first open a file in IDA
