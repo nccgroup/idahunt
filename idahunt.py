@@ -54,26 +54,55 @@ def detect_arch_pe_files(filename):
     IMAGE_FILE_MACHINE_AMD64 = 0x8664
     IMAGE_FILE_MACHINE_ARMTHUMB_MIXED = 0x01c2
     IMAGE_FILE_MACHINE_ARM64 = 0xAA64
+
     arch = None
     f = open(filename, "rb")
+    f.seek(60)
+    s = f.read(4)
+    header_offset = struct.unpack("<L", s)[0]
+    f.seek(header_offset+4)
     s = f.read(2)
-    if s != b"MZ":
-        logmsg("Not an EXE file. Ignoring automatic architecture detection")
+    machine = struct.unpack("<H", s)[0]
+    if machine == IMAGE_FILE_MACHINE_I386 or machine == IMAGE_FILE_MACHINE_ARMTHUMB_MIXED:
+        arch = 32
+    elif machine == IMAGE_FILE_MACHINE_IA64 or machine == IMAGE_FILE_MACHINE_AMD64 or machine == IMAGE_FILE_MACHINE_ARM64:
+        arch = 64
     else:
-        f.seek(60)
-        s = f.read(4)
-        header_offset = struct.unpack("<L", s)[0]
-        f.seek(header_offset+4)
-        s = f.read(2)
-        machine = struct.unpack("<H", s)[0]
-        if machine == IMAGE_FILE_MACHINE_I386 or machine == IMAGE_FILE_MACHINE_ARMTHUMB_MIXED:
-            arch = 32
-        elif machine == IMAGE_FILE_MACHINE_IA64 or machine == IMAGE_FILE_MACHINE_AMD64 or machine == IMAGE_FILE_MACHINE_ARM64:
-            arch = 64
-        else:
-            arch = None
-            logmsg("Unknown architecture detected for %s. Ignoring" % filename)
+        logmsg("Unknown architecture detected for %s. Ignoring" % filename)
     f.close()
+
+    return arch
+
+# Automatically detects the architecture for ELF files
+def detect_arch_elf_files(filename):
+    arch = None
+    f = open(filename, "rb")
+    f.seek(4)
+    s = f.read(1)
+    if s == b"\x01":
+        arch = 32
+    elif s == b"\x02":
+        arch = 64
+    else:
+        logmsg("Unknown architecture detected for %s. Ignoring" % filename)
+    f.close()
+
+    return arch
+
+def detect_arch(filename):
+    arch = None
+    f = open(filename, "rb")
+    pe = f.read(2)
+    f.seek(0)
+    elf = f.read(4)
+    f.close()
+    if pe == b"MZ":
+        arch = detect_arch_pe_files(filename)
+    elif elf == b"\x7fELF":
+        arch = detect_arch_elf_files(filename)
+    else:
+        logmsg("Not an EXE or ELF file. Ignoring automatic architecture detection")
+
     return arch
 
 # Does the initial auto-analysis when we first open a file in IDA
@@ -220,7 +249,7 @@ def do_dir(inputdir, filter, verbose, max_ida, do_file, ida_args=None, script=No
             infile, arch = res
 
             if arch == "auto":
-                arch = detect_arch_pe_files(f)
+                arch = detect_arch(f)
                 if arch == None:
                     continue
             if arch == 32:
