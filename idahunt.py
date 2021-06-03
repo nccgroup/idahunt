@@ -345,8 +345,8 @@ if __name__ == "__main__":
                         help='Maximum number of instances of IDA to run at a time (default: 10)')
     parser.add_argument('--list-only', dest='list_only', default=False, action="store_true",
                         help='List only what files would be handled without executing IDA')
-    parser.add_argument('--version', dest='ida_version', default="7.5",
-                        help='Override IDA version (e.g. "7.5"). This is used to find the path \
+    parser.add_argument('--version', dest='ida_version', default="7.6",
+                        help='Override IDA version (e.g. "7.6"). This is used to find the path \
                         of IDA on Windows.')
     args = parser.parse_args()
 
