@@ -291,7 +291,7 @@ def get_structure_offsets(e=get_screen_ea(), count_max=10, reg="esp"):
     # are we a call instruction?
     mnem = print_insn_mnem(e)
     if mnem != "call" and mnem != "jmp":
-        logmsg("Error: not a call instruction at 0x%x" % e)
+        logmsg("Error: not a x86 call instruction at 0x%x" % e)
         return None
 
     # we hardcode the instructions that we are looking for i.e. we don't look
@@ -373,7 +373,7 @@ def get_call_arguments_x86_3(e = get_screen_ea(), count_max = 5):
     # are we a call instruction?
     mnem = print_insn_mnem(e)
     if mnem != "call" and mnem != "jmp":
-        logmsg("Error: not a call instruction at 0x%x" % e)
+        logmsg("Error: not a x86 call instruction at 0x%x" % e)
         return None
 
     # Parse something like:
@@ -406,7 +406,7 @@ def get_call_arguments_x86_2(e = get_screen_ea(), count_max = 10):
     # are we a call instruction?
     mnem = print_insn_mnem(e)
     if mnem != "call" and mnem != "jmp":
-        logmsg("Error: not a call instruction at 0x%x" % e)
+        logmsg("Error: not a x86 call instruction at 0x%x" % e)
         return None
 
     # we hardcode the instructions that we are looking for i.e. we don't look
@@ -459,7 +459,7 @@ def get_call_arguments_x64_generic(e = get_screen_ea(), count_max = 10, debug=Fa
     # are we a call instruction?
     mnem = print_insn_mnem(e)
     if mnem != "call" and mnem != "jmp":
-        logmsg("Error: not a call instruction at 0x%x" % e)
+        logmsg("Error: not a x86 call instruction at 0x%x" % e)
         return None
 
     # we only supports 6 arguments for Linux
@@ -538,12 +538,22 @@ def get_call_arguments_x64_generic(e = get_screen_ea(), count_max = 10, debug=Fa
 # for more information.
 def get_call_arguments_arm(e=get_screen_ea(), count_max=10):
     args = {}
+    cached_args = {}
 
     # are we a BL instruction?
     mnem = print_insn_mnem(e)
-    if mnem != "BL" and mnem != "SVC" and mnem != "BLNE" and mnem != "BLHI" and mnem != "BLEQ":
+    if mnem != "B" and mnem != "BL" and mnem != "SVC" and mnem != "BLNE" and mnem != "BLHI" and mnem != "BLEQ":
         logmsg("Error: not a BL or SVC or BLNE or BLHI or BLEQ instruction at 0x%x" % e)
         return None
+
+    arg_instructions_arm_add_pc = ["ADD R0, PC, R0",
+                                "ADD R1, PC, R1",
+                                "ADD R2, PC, R2",
+                                "ADD R3, PC, R3"]
+    arg_instructions_arm_add = ["ADD R0, R0,",
+                                "ADD R1, R1",
+                                "ADD R2, R2",
+                                "ADD R3, R3"]
 
     # we only supports 4 arguments
     arg_instructions_arm_mov = ["MOV     R0,",
@@ -588,14 +598,47 @@ def get_call_arguments_arm(e=get_screen_ea(), count_max=10):
                                 arg_instructions_arm_adr[i],
                                 arg_instructions_arm_adr[i],
                                 arg_instructions_arm_adr3[i]]
-            if any(instruction in disasm_line for instruction in instruction_list):
+            add_pc_instruction_list = [arg_instructions_arm_add_pc[i]]
+            add_instruction_list = [arg_instructions_arm_add[i]]
+            # Remove all spaces to get rid of indentation discrepancies
+            # .text:000492B4 64 01 9F E5                 LDR             R0, =(aHydraSSystemNo_0 - 0x492C8) ; "hydra: %s: System not yet ready. Waitin"...
+            # .text:000492B8 04 20 A0 E1                 MOV             R2, R4
+            # .text:000492BC 06 10 A0 E1                 MOV             R1, R6
+            # .text:000492C0 00 00 8F E0                 ADD             R0, PC, R0 ; "hydra: %s: System not yet ready. Waitin"...
+            # .text:000492C4 31 8B FF EB                 BL              printf
+            # .text:000492C8 01 40 54 E2                 SUBS            R4, R4, #1
+            if any(instruction.replace(" ", "") in disasm_line.replace(" ", "") for instruction in add_pc_instruction_list):
+                if i not in cached_args.keys():
+                    cached_args[i] = 0
+                val = e + 4 + 4 # +2 instructions due to cached instruction pipeline, see 0x492C8 instead of 0x492C0 above
+                #logmsg("Cached pc = 0x%x for %d" % (val, i))
+                cached_args[i] += val
+            # .text:004397D4 84 10 9F E5                 LDR             R1, =(aNetworkConnect - 0x4397E8) ; "network_connect_state"
+            # .text:004397D8 84 00 9F E5                 LDR             R0, =(aSEntryPortIfPD - 0x4397F4) ; "%s: entry.  port_if=%p, devdep=%p\n"
+            # .text:004397DC 04 20 A0 E1                 MOV             R2, R4
+            # .text:004397E0 01 10 8F E0                 ADD             R1, PC, R1 ; "network_connect_state"
+            # .text:004397E4 1C 30 94 E5                 LDR             R3, [R4,#0x1C]
+            # .text:004397E8 44 10 81 E2                 ADD             R1, R1, #0x44 ; 'D'
+            # .text:004397EC 00 00 8F E0                 ADD             R0, PC, R0 ; "%s: entry.  port_if=%p, devdep=%p\n"
+            # .text:004397F0 E6 C9 EF EB                 BL              printf
+            elif any(instruction.replace(" ", "") in disasm_line.replace(" ", "") for instruction in add_instruction_list):
+                if i not in cached_args.keys():
+                    cached_args[i] = 0
+                val = get_operand_value(e, 2)
+                #logmsg("Cached addition = 0x%x for %d" % (val, i))
+                cached_args[i] += val
+            elif any(instruction.replace(" ", "") in disasm_line.replace(" ", "") for instruction in instruction_list):
                 if i not in args.keys():
                     args[i] = get_operand_value(e,1)
                     #logmsg("Found argument %d: 0x%x" % (i, args[i]))
-            elif arg_instructions_arm_ldr[i] in disasm_line:
+            elif arg_instructions_arm_ldr[i].replace(" ", "") in disasm_line.replace(" ", ""):
                 if i not in args.keys():
                     addr = get_operand_value(e,1)
                     args[i] = get_wide_dword(addr)
+                    if i in cached_args.keys():
+                        #logmsg("args[i] = 0x%x" % (args[i]))
+                        args[i] += cached_args[i]
+                        #logmsg("Adjusted args[i] = 0x%x" % (args[i]))
                     #logmsg("Found argument %d: 0x%x" % (i, args[i]))
         e = prev_head(e)
         count += 1
@@ -613,9 +656,10 @@ def get_call_arguments_x86(e = get_screen_ea(), count_max = 10):
 # based on internal helpers.
 def get_call_arguments(e=get_screen_ea(), count_max=10):
     if ARCHITECTURE == 32:
-        args = get_call_arguments_x86(e, count_max)
-        if not args:
+        if info.procName == "ARM":
             args = get_call_arguments_arm(e, count_max)
+        else:
+            args = get_call_arguments_x86(e, count_max)
     else:
         # XXX - we could determine if it is an ELF vs PE and call the right one
         args = get_call_arguments_x64_linux(e, count_max)
@@ -640,6 +684,75 @@ def find_all(bytes_str):
         ea = idc.find_binary(ea + 4, 1, bytes_str)
     return ret
 
+#.data:0012E70C off_12E70C      DCD aGetstr             ; DATA XREF: sub_1A104:loc_1A15C↑o
+#.data:0012E70C                                         ; .text:off_1A1C8↑o
+#.data:0012E70C                                         ; "getstr"
+#.data:0012E710                 DCD sub_9AE90
+#.data:0012E714                 DCD aNvramGet_0         ; "nvram_get"
+#.data:0012E718                 DCD sub_19950
+#.data:0012E71C                 DCD aNvramMatch         ; "nvram_match"
+#...
+#.data:0012F114                 DCD aGetArmorServer_0   ; "get_armor_server"
+#.data:0012F118                 DCD sub_A72A8
+#.data:0012F11C                 ALIGN 0x10
+def rename_table_of_functions_by_ascii_string_being_used(str, table_name, xref_func=first_xref, simulate=False, replace_chars_func=None, prev_value=0x0):
+    """This function takes a string as an argument and look for a table of strings/function pointers
+    where each string is the name of the function following.
+    
+    It will use the string and go backwards until it find a zero value to know it went to the beginning
+    of the table. It will stop when encountering a NULL string.
+    
+    :param str: one of the string present in the table
+    :param table_name: the name of the table to use for renaming it
+    :param simulate: True if you just want to simulate instead of actually renaming. False by default.
+    :param replace_chars_func: If not None, is a function to call to replace characters in the string
+                               before using it as a function name. E.g. when having the "bd_genie_prodcut_register.cgi"
+                               string, it allows
+    :param prev_value: integer value of the size of a pointer that is used to know when we reached
+                       the beginning of the table (i.e. it is the value before that start of the table)
+    """
+
+    global SIZE_POINTER
+    bytes_str = " ".join("%02x" % x for x in str.encode("utf-8"))
+    matches = find_all(bytes_str)
+    if len(matches) != 1:
+        logmsg("ERROR: rename_table_of_functions_by_ascii_string_being_used does not support multiple strings: %s" % (["%x" % x for x in matches]))
+        return False
+    addr_str = matches[0]
+    # aString = get_name(addr_str, ida_name.GN_VISIBLE)
+    # if not aString:
+    #     logmsg("ERROR: rename_table_of_functions_by_ascii_string_being_used did not find any name for aString")
+    #     return False
+    addr_str_used = xref_func(addr_str)
+    if addr_str_used == None:
+        return False
+    addr_table = find_first_value_backwards(addr_str_used, prev_value, count_max=50)
+    logmsg("table address: 0x%x" % addr_table)
+    if not simulate:
+        rename_function(addr_table, table_name)
+    
+    e = addr_table
+    count = 0
+    while True:
+        string_addr = get_wide_dword(e)
+        if string_addr == 0x0:
+            break
+        func_addr = get_wide_dword(e + SIZE_POINTER)
+        funcname = get_strlit_contents(string_addr).decode('utf-8')
+        if replace_chars_func != None:
+            funcname = replace_chars_func(funcname)
+        e += 2*SIZE_POINTER
+        current_func_name = get_func_name(func_addr)
+        if current_func_name.startswith("sub_"):
+            logmsg("0x%x -> %s" % (func_addr, funcname))
+            if not simulate:
+                rename_function(func_addr, funcname)
+            count += 1
+        else:
+            pass
+            #logmsg("0x%x -> %s (skipped. already named: %s)" % (current_func_addr, funcname, current_func_name))
+    logmsg("Renamed %d functions" % count)
+
 # similar to rename_function_by_aString_being_used()
 # but instead of assuming knowing an IDA aString label, takes
 # a sequence of characters to look for in order to find the right
@@ -647,6 +760,8 @@ def find_all(bytes_str):
 # Note: str can be null terminated or not, or have any byte value
 def rename_function_by_ascii_string_being_used(str, funcName, prevFunc=None, nextFunc=None, xref_func=first_xref):
 
+    # XXX - may need to fix the hexlify to be python3 compliant like in
+    # rename_table_of_functions_by_ascii_string_being_used()
     h = binascii.hexlify(str)
     bytes_str = " ".join([h[i:i+2] for i in range(0, len(h), 2)])
     matches = find_all(bytes_str)
@@ -854,6 +969,223 @@ def rename_function_by_aString_surrounding_call(aString, funcName, xref_func=fir
         return False
     return True
 
+def rename_logging_function(log_funcname, funcstr_helpers, simulate=False):
+    """Find a "logging" function in a binary and rename it. The idea is this
+    logging function can then be used to rename lots of other functions, see
+    rename_using_logging_function() and rename_functions_using_logging_function().
+    
+    :param log_funcname: string for the name of the logging function we want to use
+                         once we find it.
+    :param funcstr_helpers: a list of aNames that are used as argument for the logging
+                            function we are looking for (i.e. IDA symbols names such as 
+                            "aErrorConvertin" in the below example)
+    :param simulate: True if you just want to simulate instead of actually renaming. False by default.
+
+
+    E.g. in the below, sub_BAC8() is a logging function. So we want to rename it.
+
+    .text:0000C704 ; int __fastcall sub_C704(const char *, const char *, int, int)
+    .text:0000C704 sub_C704  
+    ...
+    .text:0000C9B8                 LDR             R1, =aErrorConvertin ; "Error converting ip address in %s()\n"
+    .text:0000C9BC                 MOV             R0, #2
+    .text:0000C9C0                 LDR             R2, =aUpnpCallbackSe ; "upnp_callback_send"
+    .text:0000C9C4                 BL              sub_BAC8
+
+    i.e. 
+    
+    sub_BAC8(2, "Error converting ip address in %s()\n", "upnp_callback_send");
+    
+    Then we will be able to rename all functions using that logging function, since that logging function
+    takes the name of the calling function as an argument. So e.g. above we can rename sub_C704()
+    into upnp_callback_send().
+    """
+
+    global ERROR_MINUS_1
+    tmp = get_name_ea_simple(log_funcname)
+    if tmp != ERROR_MINUS_1:
+        logmsg("rename_logging_function: '%s' already defined" % log_funcname)
+        return True
+
+    log_funcaddr = None
+    for s in funcstr_helpers:
+        addrstr = get_name_ea_simple(s)
+        if addrstr == ERROR_MINUS_1:
+            logmsg("rename_logging_function: Skipping using %s" % (s))
+            continue
+
+        for e in get_xrefs(addrstr):
+            e = next_head(e)
+            count = 0
+            # we only supports 10 instructions forwards looking for the "call <log_funcaddr>"
+            # but it should be enough because the funcstr_helpers strings are passed
+            # as arguments to the call
+            while count <= 10:
+                disass = GetDisasm(e)
+                print("%x -> %s" % (e, disass))
+                if disass.startswith("call") or disass.startswith("BL"):
+                    log_funcaddr = get_operand_value(e, 0)
+                    break
+                e = next_head(e)
+                count += 1
+            if log_funcaddr != None:
+                break
+
+    if log_funcaddr == None:
+        logmsg("%s not found" % log_funcname)
+        return False
+    logmsg("Found %s = 0x%x" % (log_funcname, log_funcaddr))
+
+    if simulate:
+        return True
+
+    if not set_name(log_funcaddr, log_funcname, SN_CHECK):
+        logmsg("Should not happen: failed to rename to %s" % log_funcname)
+        return False
+    return True
+
+# It would allow renaming functions like 
+# "acsd_extract_token_val" below using a logging function like "printf"
+#
+# int __fastcall acsd_extract_token_val(char *src, char *needle, char *a3)
+# {
+#   // [COLLAPSED LOCAL DECLARATIONS. PRESS KEYPAD CTRL-"+" TO EXPAND]
+# 
+#   if ( src )
+#     strcpy(buffer, src);
+#   if ( (dword_25398 & 8) != 0 )
+#     printf("ACSD >>%s(%d): copydata: %s\n", "acsd_extract_token_val", 0x3D, buffer);
+#
+# .text:0001343C acsd_extract_token_val  
+# ...
+# .text:000134D0 loc_134D0                               ; CODE XREF: acsd_extract_token_val+30↑j
+# .text:000134D0                 MOV             R2, #0x3D ; '='
+# .text:000134D4                 LDR             R1, =aAcsdExtractTok ; "acsd_extract_token_val"
+# .text:000134D8                 MOV             R3, SP
+# .text:000134DC                 LDR             R0, =aAcsdSDCopydata ; "ACSD >>%s(%d): copydata: %s\n"
+# .text:000134E0                 BL              printf
+#
+# E.g. go to "000134E0" and execute:
+def rename_using_logging_function(e=get_screen_ea(), log_funcname="printf", logfunc_arg_number=1, logfunc_preprocessor=None, check_args_callback=None, simulate=False, debug=False):
+    """Rename a function assuming a logging function is being called
+    
+    :param e: address where the call/jmp/bl/etc. instruction is
+    :param log_funcname: string for the function's name that is logging
+    :param logfunc_arg_number: index to the argument number (starts at 0 as is indexing in an array)
+    :param logfunc_preprocessor: If not None, function to call and passing logfunc_arg_number argument to get the
+                                 real function name. E.g. if we have a logging function like 
+                                 perror("func_name: error xxx\n"), we want to retrieve what is before 
+                                 the ":"
+    :param check_args_callback: callback function that checks if the arguments to log_funcname look valid
+                                before renaming a target. None if don't want to provide one.
+                                This function takes a single argument: the dictionary of arguments 
+                                as returned by get_call_arguments()
+    :param simulate: True if you just want to simulate instead of actually renaming. False by default.
+    :param debug: set to True if you want to see more logs while debugging
+    :return: None
+    """
+
+    # NOTE: We don't check if it is call/jmp/bl/etc instruction as is done
+    # inside get_call_arguments() for the different architectures, etc.
+
+    if debug:
+        logmsg("rename_using_logging_function(): 0x%x" % e)
+    
+    if not debug:
+        # early skip, avoid erroring too much due to quirks in logging functions being called
+        func = idaapi.get_func(e)
+        if not func:
+            logmsg("Skipping: Could not find function for %x" % e)
+            return False
+        current_func_addr = func.start_ea
+        current_func_name = get_func_name(current_func_addr)
+        if not current_func_name.startswith("sub_"):
+            return False # was previously renamed
+    
+    # parse arguments, parsing instructions backwards
+    args = get_call_arguments(e, count_max=35)
+    if not args:
+        logmsg("0x%x: get_call_arguments failed" % e)
+        return False
+    if logfunc_arg_number not in args.keys():
+        logmsg("0x%x: Could not find argument %d in %s args" % (e, logfunc_arg_number, log_funcname))
+        return False
+    if check_args_callback != None and not check_args_callback(args):
+        logmsg("0x%x: Skipping due to non-compliant arguments for %s" % (e, log_funcname))
+        return False
+    
+    # Is the 3rd argument an offset to a string as it should be?
+    # note args[0] is the first argument, args[1] the second, etc.
+    seg_info = get_segments_info()
+    if debug:
+        logmsg(args)
+    if not addr_is_in_one_segment(args[logfunc_arg_number], seg_info):
+        logmsg("0x%x -> 0x%x not a valid offset" % (e, args[logfunc_arg_number]))
+        return False
+
+    string = get_strlit_contents(args[logfunc_arg_number])
+    if string == None:
+        logmsg("0x%x -> 0x%x not a valid string" % (e, args[logfunc_arg_number]))
+        return False
+    string = string.decode('utf-8')
+    if logfunc_preprocessor == None:
+        funcname = string
+    else:
+        funcname = logfunc_preprocessor(string)
+        if not funcname:
+            logmsg("Skipping: Could not find a valid function with processor for %x" % e)
+            return False
+    func = idaapi.get_func(e)
+    if not func:
+        logmsg("Skipping: Could not find function for %x" % e)
+        return False
+    current_func_addr = func.start_ea
+    current_func_name = get_func_name(current_func_addr)
+    if current_func_name.startswith("sub_"):
+        logmsg("0x%x -> %s" % (current_func_addr, funcname))
+        if not simulate:
+            if not rename_function(current_func_addr, funcname):
+                return False
+    else:
+        pass
+        #logmsg("0x%x -> %s (skipped. already named: %s)" % (current_func_addr, funcname, current_func_name))
+
+    return True
+
+def rename_functions_using_logging_function(log_funcname, logfunc_arg_number, logfunc_preprocessor=None, check_args_callback=None, simulate=False, debug=False):
+    """Rename all the functions assuming a logging function is being called
+    
+    :param log_funcname: string for the function's name that is logging
+    :param logfunc_arg_number: index to the argument number (starts at 0 as is indexing in an array)
+    :param logfunc_preprocessor: If not None, function to call and passing logfunc_arg_number argument to get the
+                                 real function name. E.g. if we have a logging function like 
+                                 perror("func_name: error xxx\n"), we want to retrieve what is before 
+                                 the ":"
+    :param check_args_callback: callback function that checks if the arguments to log_funcname look valid
+                                before renaming a target. None if don't want to provide one.
+                                This function takes a single argument: the dictionary of arguments 
+                                as returned by get_call_arguments()
+    :param simulate: True if you just want to simulate instead of actually renaming. False by default.
+    :return: -1 if the logging function name was not found. The number of renamed functions otherwise
+    """
+
+    global ERROR_MINUS_1
+
+    count = 0
+    my_log_addr = get_name_ea_simple(log_funcname)
+    if my_log_addr == ERROR_MINUS_1:
+        logmsg("ERROR: you need to find %s first. Use rename_using_logging_function() first or find it manually by searching for strings that look like function names" % log_funcname)
+        return -1
+    for e in get_xrefs(my_log_addr):
+        #logmsg("0x%x" % e)
+        # we don't check for return values because we better rename as many functions as possible
+        # even if one failed e.g. because code was defined by not as a function.
+        if rename_using_logging_function(e, log_funcname=log_funcname, logfunc_arg_number=logfunc_arg_number, logfunc_preprocessor=logfunc_preprocessor, check_args_callback=check_args_callback, simulate=simulate, debug=debug):
+            count += 1
+
+    logmsg("Renamed %d functions" % count)
+    return count
+
 # Starts from address (e) and goes backwards until it finds a pointer to another
 # segment, stopping after count_max instructions
 # seg_info = get_segments_info() is passed to this function
@@ -874,6 +1206,27 @@ def find_first_pointer_backwards(e, seg_info, count_max=10):
         logmsg("Error: find_first_pointer_backwards: failed to get the first pointer for: 0x%x" % e)
         return False
     # we found a value not from a segment. The right values are the next one.
+    e += SIZE_POINTER
+    return e
+
+# Starts from address (e) and goes backwards until it finds a value
+def find_first_value_backwards(e, value, count_max=10):
+    global SIZE_POINTER
+    e -= SIZE_POINTER # we can't use prev_head() because we are not sure DWORDs are defined.
+             # Otherwise it goes to a previous DWORD defined by IDA. That can be far away from us :(
+    count = 0
+    # we only supports 10 addresses backwards
+    while count <= count_max:
+        current_value = get_wide_dword(e)
+        #logmsg("%x" % addr)
+        if current_value == value:
+            break
+        e -= SIZE_POINTER
+        count += 1
+    if count > count_max:
+        logmsg("Error: find_first_pointer_backwards: failed to get the first pointer for: 0x%x" % e)
+        return False
+    # we found a value. The right values are the next one.
     e += SIZE_POINTER
     return e
 
