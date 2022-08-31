@@ -222,7 +222,7 @@ def delete_asm_files(inputdir, list_only=False):
                 os.remove(f)
 
 # main function handling an input folder
-# do_file is one of {analyse_file,open_file,exec_ida_python_script}
+# - "do_file" is one of {analyse_file,open_file,exec_ida_python_script}
 def do_dir(inputdir, filter, verbose, max_ida, do_file, ida_args=None, script=None, list_only=False):
     pids = []
     call_count = 0
@@ -345,8 +345,8 @@ if __name__ == "__main__":
                         help='Maximum number of instances of IDA to run at a time (default: 10)')
     parser.add_argument('--list-only', dest='list_only', default=False, action="store_true",
                         help='List only what files would be handled without executing IDA')
-    parser.add_argument('--version', dest='ida_version', default="7.6",
-                        help='Override IDA version (e.g. "7.6"). This is used to find the path \
+    parser.add_argument('--version', dest='ida_version', default="8.0",
+                        help='Override IDA version (e.g. "8.0"). This is used to find the path \
                         of IDA on Windows.')
     args = parser.parse_args()
 

@@ -30,7 +30,7 @@ def logmsg(s, end=None, debug=True):
 def build_version(dirname):
     match = re.search(r'ilo([^\\/.]+)_([^\\/.]+)\.bin', dirname)
     if not match:
-        logmsg("Could not find the asaXXX.bin in string: %s" % dirname)
+        logmsg("Could not find the iloXXX.bin in string: %s" % dirname)
         return '', ''
 
     ilo_version = match.group(1)
