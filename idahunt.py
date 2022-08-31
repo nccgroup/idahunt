@@ -108,7 +108,7 @@ def detect_arch(filename):
 # Does the initial auto-analysis when we first open a file in IDA
 # Returns False if does not do anything, the subprocess if it was created
 # of True if it was listing only.
-def analyse_file(ida_executable, infile, logfile, idbfile, verbose, ida_args=None, script=None, list_only=False):
+def analyse_file(ida_executable, infile, logfile, idbfile, verbose, ida_args=None, script=None, list_only=False, env=None):
     if os.path.isfile(idbfile):
         logmsg("Skipping existing IDB %s. Analysis has already been made" % idbfile, debug=verbose)
         return False
@@ -135,7 +135,7 @@ def analyse_file(ida_executable, infile, logfile, idbfile, verbose, ida_args=Non
 # Re-open an existing IDB
 # Returns False if does not do anything, the subprocess if it was created
 # of True if it was listing only.
-def open_file(ida_executable, infile, logfile, idbfile, verbose, ida_args=None, script=None, list_only=False):
+def open_file(ida_executable, infile, logfile, idbfile, verbose, ida_args=None, script=None, list_only=False, env=None):
     if not os.path.isfile(idbfile):
         logmsg("Skipping no existing IDB %s. Execute --analyse first." % idbfile, debug=verbose)
         return False
@@ -161,7 +161,7 @@ def open_file(ida_executable, infile, logfile, idbfile, verbose, ida_args=None, 
 # Re-open an existing IDB and execute an IDA Python script before leaving
 # Returns False if does not do anything, the subprocess if it was created
 # of True if it was listing only.
-def exec_ida_python_script(ida_executable, infile, logfile, idbfile, verbose, ida_args=None, script=None, list_only=False):
+def exec_ida_python_script(ida_executable, infile, logfile, idbfile, verbose, ida_args=None, script=None, list_only=False, env=None):
     if not script:
         logmsg("Skipping because no script provided. Need a script to execute it in IDA", debug=verbose)
         return False
@@ -200,6 +200,12 @@ def exec_ida_python_script(ida_executable, infile, logfile, idbfile, verbose, id
     # session upon completion. 1 is arbitrary. Just needs to be non-zero args
     d = dict(os.environ)
     d["DO_EXIT"] = "1"
+    if env is not None:
+        if verbose:
+            logmsg("Environment variables:")
+            for (k,v) in env.items():
+                logmsg("%s=%s" % (k, v))
+        d.update(env)
     if not list_only:
         return subprocess.Popen(cmd, shell, env=d)
     else:
@@ -223,7 +229,7 @@ def delete_asm_files(inputdir, list_only=False):
 
 # main function handling an input folder
 # - "do_file" is one of {analyse_file,open_file,exec_ida_python_script}
-def do_dir(inputdir, filter, verbose, max_ida, do_file, ida_args=None, script=None, list_only=False):
+def do_dir(inputdir, filter, verbose, max_ida, do_file, ida_args=None, script=None, list_only=False, env=None):
     pids = []
     call_count = 0
     exec_count = 0
@@ -266,7 +272,12 @@ def do_dir(inputdir, filter, verbose, max_ida, do_file, ida_args=None, script=No
                 sys.exit()
 
         logfile = f_noext + ".log"
-        pid = do_file(ida_executable, f, logfile, idbfile, verbose, ida_args=ida_args, script=script, list_only=list_only)
+        env_current = None
+        if env is not None:
+            env_current = dict(env)
+            for (k,v) in env_current.items():
+                env_current[k] = v.replace("%%FILE%%", os.path.basename(f_noext))
+        pid = do_file(ida_executable, f, logfile, idbfile, verbose, ida_args=ida_args, script=script, list_only=list_only, env=env_current)
         # we check if pid is a real PID or if it returned True (list only)
         if pid != False:
             call_count += 1
@@ -319,7 +330,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--inputdir', dest='inputdir', default=None,
                         help='Input folder to search for files')
-    parser.add_argument('--analyse', '--analyze', dest='analyse', default=False,
+    parser.add_argument('--analyse', dest='analyse', default=False,
                         action='store_true', help='analyse all files \
                         i.e. create .idb for all of them')
     parser.add_argument('--open', dest='open', default=False, action='store_true',
