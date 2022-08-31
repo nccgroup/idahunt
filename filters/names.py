@@ -37,11 +37,8 @@ def filter(f, name, extension, arch, length, verbose=True):
     if extension and file_extension != extension:
         logmsg("Skipping non-matching extension %s in %s" % (extension, os.path.basename(f)))
         return None
-    if name and not name in os.path.basename(f):
-        logmsg("Skipping non-matching name %s in %s" % (name, os.path.basename(f)))
-        return None
     if length and len(os.path.basename(f)) != length:
-        logmsg("Skipping non-matching name: len(%s) != %d" % (os.path.basename(f), length))
+        logmsg("Skipping non-matching length: len(%s) != %d" % (os.path.basename(f), length))
         return None
 
     if arch == "64":
