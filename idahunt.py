@@ -339,6 +339,8 @@ if __name__ == "__main__":
                         help='Additional arguments to pass to IDA (e.g. -p<processor> -i<entry_point> -b<load_addr>)')
     parser.add_argument('--scripts', dest='scripts', nargs="+", default=None,
                         help='List of IDA Python scripts to execute in this order')
+    parser.add_argument('--diff', dest='diff', default=False,
+                        action='store_true', help='Diff all files with diaphora')
     parser.add_argument('--filter', dest='filter', default="filters/default.py",
                         help='External python script with optional arguments \
                         defining a filter for the names of the files to \
@@ -359,12 +361,16 @@ if __name__ == "__main__":
     parser.add_argument('--version', dest='ida_version', default="8.0",
                         help='Override IDA version (e.g. "8.0"). This is used to find the path \
                         of IDA on Windows.')
+    parser.add_argument('--diaphora-path', dest='diaphora_path', default=None,
+                        help='Specify diaphora path when --diff is used. This is used to find the diaphora_ida.py and diaphora.py scripts')
+    parser.add_argument('--diff-name', dest='diff_name', default=None,
+                        help='Specify filename to diff when --diff is used. Indeed, we are required to diff files with the same name but from different folders')
     args = parser.parse_args()
 
     if not args.analyse and not args.cleanup_temporary and \
-        not args.cleanup and args.scripts == None and args.open == None:
+        not args.cleanup and args.scripts is None and not args.open and not args.diff:
         logmsg("ERROR: You didn't specify an action. Don't know what to do")
-        logmsg("ERROR: Try --analyse or --cleanup or --temp-cleanup or --scripts or --open")
+        logmsg("ERROR: Try --analyse or --cleanup or --temp-cleanup or --scripts or --open or --diff")
         sys.exit(1)
 
     if args.list_only:
@@ -442,9 +448,23 @@ if __name__ == "__main__":
     # clean the dir, create idbs, rename all the idbs, and then update a
     # database all in one run
 
-    if args.list_only and (not args.analyse and not args.scripts and not args.cleanup and not args.cleanup_temporary and args.open == None):
-        logmsg("ERROR: You must use --cleanup, --analyse or --scripts with --list-only")
-        sys.exit()
+    if args.list_only and (not args.analyse and not args.scripts and not args.cleanup and not args.cleanup_temporary and not args.open and not args.diff):
+        logmsg("ERROR: You must use --cleanup, --analyse, --temp-cleanup, --open, --diff or --scripts with --list-only")
+        sys.exit(1)
+    
+    if args.diff:
+        if args.analyse or args.scripts or args.open or args.ida_args is not None:
+            logmsg("ERROR: diffing only supports running without other actions or additional ida arguments")
+            sys.exit(1)
+        if args.diff_name is None:
+            logmsg("ERROR: diffing requires a filename to diff with --diff-name")
+            sys.exit(1)
+        if args.diaphora_path is None:
+            logmsg("ERROR: diffing requires a path to diaphora root folder")
+            sys.exit(1)
+        if not os.path.exists(os.path.join(args.diaphora_path, "diaphora.py")):
+            logmsg("ERROR: Wrong diaphora path")
+            sys.exit(1)
 
     start_time = time.time()
 
@@ -460,6 +480,22 @@ if __name__ == "__main__":
     if args.cleanup:
         logmsg("CLEANUP ASM FILES")
         delete_asm_files(args.inputdir, list_only=args.list_only)
+
+    if args.diff:
+        logmsg("EXECUTE DIFF-EXPORT")
+        script = os.path.join(args.diaphora_path, "diaphora_ida.py")
+        env = {
+            "DIAPHORA_AUTO2": "1",
+            "DIAPHORA_EXPORT_FILE": "%%FILE%%.sqlite",
+        }
+        filter_ = f"filters\\diff.py -n {args.diff_name}"
+        do_dir(args.inputdir, filter_, args.verbose, max_ida=args.max_ida,
+               do_file=exec_ida_python_script, script=script, list_only=args.list_only,
+               ida_args=None, env=env)
+
+        # XXX diff and show
+
+        sys.exit(0)
 
     if args.analyse:
         logmsg("ANALYSING FILES")
