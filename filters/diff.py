@@ -27,7 +27,7 @@ def logmsg(s, end=None, debug=True):
 # do we actually treat it?
 def filter(f, name, verbose=True):
     if name and name != os.path.basename(f):
-        logmsg("Skipping non-matching name %s != %s" % (name, os.path.basename(f)))
+        logmsg("Skipping non-matching name %s != %s" % (name, os.path.basename(f)), debug=verbose)
         return None
     arch_ = "auto"
     return f, arch_

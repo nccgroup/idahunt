@@ -22,6 +22,8 @@ import time
 import glob
 import filelock
 import struct
+from pathlib import Path
+import sqlite3
 
 def logmsg(s, end=None, debug=True):
     if not debug:
@@ -33,6 +35,13 @@ def logmsg(s, end=None, debug=True):
             print("[idahunt] " + s)
     else:
         print(s)
+
+# https://arcpy.wordpress.com/2012/04/20/146/
+def hms_string(sec_elapsed):
+    h = int(sec_elapsed / (60 * 60))
+    m = int((sec_elapsed % (60 * 60)) / 60)
+    s = sec_elapsed % 60.
+    return "{}:{:>02}:{:>05.2f}".format(h, m, s)
 
 # https://gist.github.com/polyvertex/b6d337fec7011a0f9292
 def iglob_hidden(*args, **kwargs):
@@ -235,8 +244,7 @@ def check_diff_export_done(f, verbose):
         logmsg("Skipping existing sqlite %s. Diff-export has already been made" % sqlitefile, debug=verbose)
         return True
     return False
-    
-    
+
 # main function handling an input folder
 # - "do_file" is one of {analyse_file,open_file,exec_ida_python_script}
 # - "do_check" is one of {check_diff_export_done}
@@ -331,12 +339,117 @@ def do_dir(inputdir, filter, verbose, max_ida, do_file, ida_args=None, script=No
     else:
         logmsg("Executed IDA %d/%d times" % (exec_count, call_count))
 
-# https://arcpy.wordpress.com/2012/04/20/146/
-def hms_string(sec_elapsed):
-    h = int(sec_elapsed / (60 * 60))
-    m = int((sec_elapsed % (60 * 60)) / 60)
-    s = sec_elapsed % 60.
-    return "{}:{:>02}:{:>05.2f}".format(h, m, s)
+def parse_diff_results(db_path):
+    txt_path = db_path.parent / (str(db_path.stem) + ".txt")
+    connection = sqlite3.connect(db_path)
+    cursor = connection.cursor()
+    rows = cursor.execute("SELECT * from RESULTS WHERE type != \"best\"")
+    s = ""
+    for row in rows:
+        type_, line, address, name, address2, name2, ratio, bb1, bb2, description = row
+        if type_ == "best":
+            continue
+        max_ratio = 1.0
+        if float(ratio) >= max_ratio:
+            continue
+        s += "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n" % (type_, line, address, name, address2, name2, ratio, bb1, bb2, description)
+    txt_path.write_text(s)
+
+# compare 2 sqlite database with diaphora and generate the diff sqlite
+def diff_all(inputdir, filename, verbose, max_python, diaphora_path, list_only=False):
+    pids = []
+    call_count = 0
+    exec_count = 0
+    files_list = []
+    for f in iglob_hidden("%s/**/%s" % (inputdir, filename), recursive=True):
+        if os.path.isdir(f):
+            continue
+        files_list.append(f)
+
+    for i in range(len(files_list)-1):
+        f = Path(files_list[i])
+        f2 = Path(files_list[i+1])
+        # We assume files are in a parent folder that dictate the version
+        # and that the versions are in alphabetical order so we can diff 2 consecutive ones
+        version = f.parent.name
+        version2 = f2.parent.name
+
+        # We save the diff database in the more recent file folder
+        outputdir = f2.parent/f"{version}_vs_{version2}"
+        outdb_path = outputdir / f"{filename}.diaphora"
+        outtxt_path = outputdir / f"{filename}.txt"
+
+        if os.path.isfile(outdb_path) and os.path.isfile(outtxt_path):
+            logmsg("Skipping existing diff %s vs %s as was already been made" % (version, version2), debug=verbose)
+            continue
+
+        # The diff database is created at the end when the results have been computed so safe
+        if os.path.isfile(outdb_path):
+            logmsg("Skipping existing diff sqlite %s creation" % outdb_path, debug=verbose)
+            parse_diff_results(outdb_path)
+            continue
+        outputdir.mkdir(parents=True, exist_ok=True)
+
+        f_noext = os.path.splitext(f)[0]
+        f2_noext = os.path.splitext(f2)[0]
+
+        sqlitefile = f_noext + ".sqlite"
+        sqlitefile2 = f2_noext + ".sqlite"
+
+        logmsg("Diffing %s vs %s" % (version, version2))
+        python_path = sys.executable
+        script_path = os.path.join(diaphora_path, "diaphora.py")
+        cmd = [python_path, script_path, sqlitefile, sqlitefile2, "-o", str(outdb_path)]
+        if verbose:
+            logmsg("%s" % " ".join(cmd))
+        if list_only:
+            pid = True
+        else:
+            shell=True
+            if os.name == "posix":
+                shell=False
+            pid = subprocess.Popen(cmd, shell)
+
+        # we check if pid is a real PID or if it returned True (list only)
+        call_count += 1
+        if type(pid) != bool:
+            exec_count += 1
+            pids.append((pid, version, version2, outdb_path))
+        if type(pid) == bool:
+            continue
+        if max_python == None or len(pids) < max_python:
+            continue
+
+        # Wait for all the Python instances to complete
+        while (len(pids) != 0):
+            for p in pids:
+                if p[0].poll() != None:
+                    pids.remove(p)
+                    if not os.path.isfile(p[3]):
+                        logmsg("ERROR diffing %s vs %s" % (p[1], p[2]), debug=True)
+                    parse_diff_results(p[3])
+
+            logmsg("Waiting on %d Python instances" % len(pids), end='\r')
+            sys.stdout.flush()
+            time.sleep(2)
+        logmsg("\nContinuing")
+
+    # Wait for all remaining Python instances to complete
+    while (len(pids) != 0):
+        for p in pids:
+            if p[0].poll() != None:
+                pids.remove(p)
+                if not os.path.isfile(p[3]):
+                    logmsg("ERROR diffing %s vs %s" % (p[1], p[2]), debug=True)
+                parse_diff_results(p[3])
+
+        logmsg("Waiting on remaining %d Python instances" % len(pids), end='\r')
+        sys.stdout.flush()
+        time.sleep(5)
+    if call_count == 0:
+        logmsg("WARN: Didn't find any files to run diff on")
+    else:
+        logmsg("Executed Python %d/%d times" % (exec_count, call_count))
 
 if __name__ == "__main__":
 
@@ -506,8 +619,11 @@ if __name__ == "__main__":
                do_file=exec_ida_python_script, script=script, list_only=args.list_only,
                ida_args=None, env=env, do_check=check_diff_export_done)
 
-        # XXX diff and show
+        # XXX - use same max python instances as IDA instances
+        logmsg("EXECUTE DIFF")
+        diff_all(args.inputdir, args.diff_name, args.verbose, args.max_ida, args.diaphora_path, list_only=args.list_only)
 
+        # XXX show
         sys.exit(0)
 
     if args.analyse:
