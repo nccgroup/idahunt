@@ -374,19 +374,19 @@ def diff_all(inputdir, filename, verbose, max_python, diaphora_path, list_only=F
         version = f.parent.name
         version2 = f2.parent.name
 
-        # We save the diff database in the more recent file folder
+        # We save the diff database in the most recent file folder
         outputdir = f2.parent/f"{version}_vs_{version2}"
-        outdb_path = outputdir / f"{filename}.diaphora"
-        outtxt_path = outputdir / f"{filename}.txt"
+        diaphoradb_path = outputdir / f"{filename}.diaphora"
+        diaphoratxt_path = outputdir / f"{filename}.txt"
 
-        if os.path.isfile(outdb_path) and os.path.isfile(outtxt_path):
+        if os.path.isfile(diaphoradb_path) and os.path.isfile(diaphoratxt_path):
             logmsg("Skipping existing diff %s vs %s as was already been made" % (version, version2), debug=verbose)
             continue
 
         # The diff database is created at the end when the results have been computed so safe
-        if os.path.isfile(outdb_path):
-            logmsg("Skipping existing diff sqlite %s creation" % outdb_path, debug=verbose)
-            parse_diff_results(outdb_path)
+        if os.path.isfile(diaphoradb_path):
+            logmsg("Skipping existing diff sqlite %s creation" % diaphoradb_path, debug=verbose)
+            parse_diff_results(diaphoradb_path)
             continue
         outputdir.mkdir(parents=True, exist_ok=True)
 
@@ -399,7 +399,7 @@ def diff_all(inputdir, filename, verbose, max_python, diaphora_path, list_only=F
         logmsg("Diffing %s vs %s" % (version, version2))
         python_path = sys.executable
         script_path = os.path.join(diaphora_path, "diaphora.py")
-        cmd = [python_path, script_path, sqlitefile, sqlitefile2, "-o", str(outdb_path)]
+        cmd = [python_path, script_path, sqlitefile, sqlitefile2, "-o", str(diaphoradb_path)]
         if verbose:
             logmsg("%s" % " ".join(cmd))
         if list_only:
@@ -408,13 +408,14 @@ def diff_all(inputdir, filename, verbose, max_python, diaphora_path, list_only=F
             shell=True
             if os.name == "posix":
                 shell=False
+            # XXX - hide stdout output from the command and save it into a .log file
             pid = subprocess.Popen(cmd, shell)
 
         # we check if pid is a real PID or if it returned True (list only)
         call_count += 1
         if type(pid) != bool:
             exec_count += 1
-            pids.append((pid, version, version2, outdb_path))
+            pids.append((pid, version, version2, diaphoradb_path))
         if type(pid) == bool:
             continue
         if max_python == None or len(pids) < max_python:
@@ -450,6 +451,168 @@ def diff_all(inputdir, filename, verbose, max_python, diaphora_path, list_only=F
         logmsg("WARN: Didn't find any files to run diff on")
     else:
         logmsg("Executed Python %d/%d times" % (exec_count, call_count))
+
+# A filename can't contain any of the following characters: \ / : * ? " < > |
+# XXX - We could potentially use a demangling library like https://golang.org/pkg/cmd/vendor/github.com/ianlancetaylor/demangle/ ?
+def replace_bad_characters(funcname):
+    funcname = funcname.replace(":", "-")
+    funcname = funcname.replace("?", "")
+    funcname = funcname.replace("*", "")
+    funcname = funcname.replace("<", "-")
+    funcname = funcname.replace(">", "-")
+    return funcname
+
+# generate HTML for one given function among all the versions of a given file by using previously computed diff information
+def show_all(inputdir, filter, filename, funcname, verbose, max_ida, diaphora_path, list_only=False):
+    pids = []
+    call_count = 0
+    exec_count = 0
+    files_list = []
+    for f in iglob_hidden("%s/**/%s" % (inputdir, filename), recursive=True):
+        if os.path.isdir(f):
+            continue
+        files_list.append(f)
+
+    for i in range(len(files_list)-1):
+        f = Path(files_list[i])
+        f2 = Path(files_list[i+1])
+        # We assume files are in a parent folder that dictate the version
+        # and that the versions are in alphabetical order so we can diff 2 consecutive ones
+        version = f.parent.name
+        version2 = f2.parent.name
+
+        sqlitedb_path = f.parent / (f.stem + ".sqlite")
+        sqlitedb2_path = f2.parent / (f2.stem + ".sqlite")
+        outputdir = f2.parent/f"{version}_vs_{version2}"
+        diaphoradb_path = outputdir / f"{filename}.diaphora"
+        diaphoratxt_path = outputdir / f"{filename}.txt"
+        print(sqlitedb_path, sqlitedb2_path)
+
+        if not os.path.isfile(sqlitedb_path) or not os.path.isfile(sqlitedb2_path) or not os.path.isfile(diaphoradb_path) or not os.path.isfile(diaphoratxt_path):
+            logmsg("Skipping existing show %s vs %s as diff not made yet" % (version, version2), debug=verbose)
+            continue
+
+        output_html_dir = outputdir / filename
+        html_asm_path = output_html_dir / f"{replace_bad_characters(funcname)}_asm.html"
+        html_pseudo_path = output_html_dir / f"{replace_bad_characters(funcname)}_pseudo.html"
+
+        print(html_asm_path, html_pseudo_path)
+
+        if os.path.isfile(html_asm_path) and os.path.isfile(html_pseudo_path):
+            logmsg("Skipping existing show %s vs %s for %s" % (version, version2, funcname), debug=verbose)
+            continue
+        output_html_dir.mkdir(parents=True, exist_ok=True)
+
+        f_noext = os.path.splitext(f)[0]
+        if filter:
+            module_name = filter.split()[0]
+            if module_name.endswith(".py"):
+                module_name = module_name[:-3]
+            module_name = path_to_module_string(module_name)
+            m = __import__(module_name, fromlist=[''])
+            res = m.main(f, filter)
+            if res == None:
+                continue
+            infile, arch = res
+
+            if arch == "auto":
+                arch = detect_arch(f)
+                if arch == None:
+                    continue
+            if arch == 32:
+                ida_executable = IDA32
+                idbfile = f_noext + ".idb"
+            elif arch == 64:
+                ida_executable = IDA64
+                idbfile = f_noext + ".i64"
+            else:
+                logmsg("Invalid architecture returned by filter")
+                sys.exit()
+        else:
+                logmsg("Must specify filter")
+                sys.exit()
+
+        logfile = f_noext + ".log"
+
+        connection = sqlite3.connect(diaphoradb_path)
+        cursor = connection.cursor()
+        rows = cursor.execute(f"SELECT name, address, address2 from RESULTS WHERE type != \"best\" and name = \"{funcname}\"")
+        for row in rows:
+            name, address, address2 = row
+            break
+
+        env = {
+            "DIAPHORA_AUTO4":"1",
+            "DIAPHORA_DB1":str(sqlitedb_path),
+            "DIAPHORA_DB2":str(sqlitedb2_path),
+            "DIAPHORA_DIFF":str(diaphoradb_path),
+            "DIAPHORA_EA1":address,
+            "DIAPHORA_EA2":address2,
+            "DIAPHORA_HTML_ASM":str(html_asm_path),
+            "DIAPHORA_HTML_PSEUDO":str(html_pseudo_path),
+        }
+
+        logmsg("Showing %s vs %s for %s" % (version, version2, funcname))
+        script = os.path.join(diaphora_path, "diaphora_ida.py")
+        # open IDA but at least does not display message boxes to the user.
+        cmd = [ida_executable, "-A", "-S%s" % script, "-L%s" % logfile, idbfile]
+        if verbose:
+            logmsg("%s" % " ".join(cmd))
+        shell=True
+        if os.name == "posix":
+            shell=False
+        # We pass 1 to the script so it can detect (if it wants) to Exit() the IDA
+        # session upon completion. 1 is arbitrary. Just needs to be non-zero args
+        d = dict(os.environ)
+        d["DO_EXIT"] = "1"
+        if verbose:
+            logmsg("Environment variables:")
+            for (k,v) in env.items():
+                logmsg("%s=%s" % (k, v))
+        d.update(env)
+        if list_only:
+            pid = True
+        else:
+            pid = subprocess.Popen(cmd, shell, env=d)
+
+        # we check if pid is a real PID or if it returned True (list only)
+        call_count += 1
+        if type(pid) != bool:
+            exec_count += 1
+            pids.append((pid, version, version2, html_asm_path, html_pseudo_path))
+        if type(pid) == bool:
+            continue
+        if max_ida == None or len(pids) < max_ida:
+            continue
+
+        # Wait for all the IDA instances to complete
+        while (len(pids) != 0):
+            for p in pids:
+                if p[0].poll() != None:
+                    pids.remove(p)
+                    if not os.path.isfile(p[3]) or not os.path.isfile(p[4]):
+                        logmsg("ERROR showing %s vs %s" % (p[1], p[2]), debug=True)
+
+            logmsg("Waiting on %d IDA instances" % len(pids), end='\r')
+            sys.stdout.flush()
+            time.sleep(2)
+        logmsg("\nContinuing")
+
+    # Wait for all remaining IDA instances to complete
+    while (len(pids) != 0):
+        for p in pids:
+            if p[0].poll() != None:
+                pids.remove(p)
+                if not os.path.isfile(p[3]) or not os.path.isfile(p[4]):
+                    logmsg("ERROR showing %s vs %s" % (p[1], p[2]), debug=True)
+
+        logmsg("Waiting on remaining %d IDA instances" % len(pids), end='\r')
+        sys.stdout.flush()
+        time.sleep(5)
+    if call_count == 0:
+        logmsg("WARN: Didn't find any files to run diff on")
+    else:
+        logmsg("Executed IDA %d/%d times" % (exec_count, call_count))
 
 if __name__ == "__main__":
 
@@ -623,7 +786,9 @@ if __name__ == "__main__":
         logmsg("EXECUTE DIFF")
         diff_all(args.inputdir, args.diff_name, args.verbose, args.max_ida, args.diaphora_path, list_only=args.list_only)
 
-        # XXX show
+        funcname = "XXX" # XXX - hardcoded for now
+        show_all(args.inputdir, filter_, args.diff_name, funcname, args.verbose, args.max_ida, args.diaphora_path, list_only=args.list_only)
+
         sys.exit(0)
 
     if args.analyse:
