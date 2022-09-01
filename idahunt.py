@@ -227,9 +227,20 @@ def delete_asm_files(inputdir, list_only=False):
             if not list_only:
                 os.remove(f)
 
+def check_diff_export_done(f, verbose):
+    f_noext = os.path.splitext(f)[0]
+    sqlitefile = f_noext + ".sqlite"
+    sqlitecrashfile = f_noext + ".sqlite-crash"
+    if os.path.isfile(sqlitefile) and not os.path.isfile(sqlitecrashfile):
+        logmsg("Skipping existing sqlite %s. Diff-export has already been made" % sqlitefile, debug=verbose)
+        return True
+    return False
+    
+    
 # main function handling an input folder
 # - "do_file" is one of {analyse_file,open_file,exec_ida_python_script}
-def do_dir(inputdir, filter, verbose, max_ida, do_file, ida_args=None, script=None, list_only=False, env=None):
+# - "do_check" is one of {check_diff_export_done}
+def do_dir(inputdir, filter, verbose, max_ida, do_file, ida_args=None, script=None, list_only=False, env=None, do_check=None):
     pids = []
     call_count = 0
     exec_count = 0
@@ -240,7 +251,9 @@ def do_dir(inputdir, filter, verbose, max_ida, do_file, ida_args=None, script=No
            f.endswith(".log") or f.endswith(".asm") or \
            f.endswith(".til") or f.endswith(".id0") or \
            f.endswith(".id1") or f.endswith(".id2") or \
-           f.endswith(".nam"):
+           f.endswith(".nam") or f.endswith(".sqlite"):
+            continue
+        if do_check is not None and do_check(f, verbose):
             continue
         f_noext = os.path.splitext(f)[0]
         if filter:
@@ -491,7 +504,7 @@ if __name__ == "__main__":
         filter_ = f"filters\\diff.py -n {args.diff_name}"
         do_dir(args.inputdir, filter_, args.verbose, max_ida=args.max_ida,
                do_file=exec_ida_python_script, script=script, list_only=args.list_only,
-               ida_args=None, env=env)
+               ida_args=None, env=env, do_check=check_diff_export_done)
 
         # XXX diff and show
 
