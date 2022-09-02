@@ -630,6 +630,8 @@ if __name__ == "__main__":
                         help='List of IDA Python scripts to execute in this order')
     parser.add_argument('--diff', dest='diff', default=False,
                         action='store_true', help='Diff all files with diaphora')
+    parser.add_argument('--html', dest='html', default=False,
+                        action='store_true', help='Generate HTML diff (asm + pseudocode) for all files with diaphora')
     parser.add_argument('--filter', dest='filter', default="filters/default.py",
                         help='External python script with optional arguments \
                         defining a filter for the names of the files to \
@@ -652,14 +654,16 @@ if __name__ == "__main__":
                         of IDA on Windows.')
     parser.add_argument('--diaphora-path', dest='diaphora_path', default=None,
                         help='Specify diaphora path when --diff is used. This is used to find the diaphora_ida.py and diaphora.py scripts')
-    parser.add_argument('--diff-name', dest='diff_name', default=None,
-                        help='Specify filename to diff when --diff is used. Indeed, we are required to diff files with the same name but from different folders')
+    parser.add_argument('--filename', dest='filename', default=None,
+                        help='Specify filename to handle when --diff or --html is used. Indeed, we are required to diff files with the same name but from different folders')
+    parser.add_argument('--funcname', dest='funcname', default=None,
+                        help='Specify function name when --html is used. The function name is from first database to generate the asm/pseudocode diff for')
     args = parser.parse_args()
 
     if not args.analyse and not args.cleanup_temporary and \
-        not args.cleanup and args.scripts is None and not args.open and not args.diff:
+        not args.cleanup and args.scripts is None and not args.open and not args.diff and not args.html:
         logmsg("ERROR: You didn't specify an action. Don't know what to do")
-        logmsg("ERROR: Try --analyse or --cleanup or --temp-cleanup or --scripts or --open or --diff")
+        logmsg("ERROR: Try --analyse or --cleanup or --temp-cleanup or --scripts or --open or --diff or --html")
         sys.exit(1)
 
     if args.list_only:
@@ -737,22 +741,27 @@ if __name__ == "__main__":
     # clean the dir, create idbs, rename all the idbs, and then update a
     # database all in one run
 
-    if args.list_only and (not args.analyse and not args.scripts and not args.cleanup and not args.cleanup_temporary and not args.open and not args.diff):
-        logmsg("ERROR: You must use --cleanup, --analyse, --temp-cleanup, --open, --diff or --scripts with --list-only")
+    if args.list_only and (not args.analyse and not args.scripts and not args.cleanup and not args.cleanup_temporary and not args.open and not args.diff and not args.html):
+        logmsg("ERROR: You must use --cleanup, --analyse, --temp-cleanup, --open, --diff, --html or --scripts with --list-only")
         sys.exit(1)
     
     if args.diff:
         if args.analyse or args.scripts or args.open or args.ida_args is not None:
-            logmsg("ERROR: diffing only supports running without other actions or additional ida arguments")
+            logmsg("ERROR: Diffing only supports running without other actions or additional ida arguments")
             sys.exit(1)
-        if args.diff_name is None:
-            logmsg("ERROR: diffing requires a filename to diff with --diff-name")
+        if args.filename is None:
+            logmsg("ERROR: Diffing requires a filename to diff with --diff-name")
             sys.exit(1)
         if args.diaphora_path is None:
-            logmsg("ERROR: diffing requires a path to diaphora root folder")
+            logmsg("ERROR: Diffing requires a path to diaphora root folder")
             sys.exit(1)
         if not os.path.exists(os.path.join(args.diaphora_path, "diaphora.py")):
             logmsg("ERROR: Wrong diaphora path")
+            sys.exit(1)
+
+    if args.html:
+        if args.funcname is None:
+            logmsg("ERROR: Generating asm/pseudocode requires a function name to generate HTML for with --funcname")
             sys.exit(1)
 
     start_time = time.time()
@@ -777,18 +786,21 @@ if __name__ == "__main__":
             "DIAPHORA_AUTO2": "1",
             "DIAPHORA_EXPORT_FILE": "%%FILE%%.sqlite",
         }
-        filter_ = f"filters\\diff.py -n {args.diff_name}"
+        filter_ = f"filters\\diff.py -n {args.filename}"
         do_dir(args.inputdir, filter_, args.verbose, max_ida=args.max_ida,
                do_file=exec_ida_python_script, script=script, list_only=args.list_only,
                ida_args=None, env=env, do_check=check_diff_export_done)
 
         # XXX - use same max python instances as IDA instances
         logmsg("EXECUTE DIFF")
-        diff_all(args.inputdir, args.diff_name, args.verbose, args.max_ida, args.diaphora_path, list_only=args.list_only)
+        diff_all(args.inputdir, args.filename, args.verbose, args.max_ida, args.diaphora_path, list_only=args.list_only)
 
-        funcname = "XXX" # XXX - hardcoded for now
-        show_all(args.inputdir, filter_, args.diff_name, funcname, args.verbose, args.max_ida, args.diaphora_path, list_only=args.list_only)
+    if args.html:
+        logmsg("EXECUTE GENERATE HTML")
+        filter_ = f"filters\\diff.py -n {args.filename}"
+        show_all(args.inputdir, filter_, args.filename, args.funcname, args.verbose, args.max_ida, args.diaphora_path, list_only=args.list_only)
 
+    if args.diff or args.html:
         sys.exit(0)
 
     if args.analyse:
