@@ -31,5 +31,10 @@ def main(f, cmdline):
     # Ignore .c source, .sh bash scripts files
     if file_extension == ".c" or file_extension == ".sh":
         return None
+    fd = open(f, "rb")
+    data = fd.read(len(b"#!/bin/sh"))
+    fd.close()
+    if data == b"#!/bin/sh":
+        return None
 
     return f, "auto"

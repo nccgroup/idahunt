@@ -110,7 +110,7 @@ def detect_arch(filename):
     elif elf == b"\x7fELF":
         arch = detect_arch_elf_files(filename)
     else:
-        logmsg("Not an EXE or ELF file. Ignoring automatic architecture detection")
+        logmsg("%s: not an EXE or ELF file. Ignoring automatic architecture detection" % filename)
 
     return arch
 
