@@ -649,8 +649,8 @@ if __name__ == "__main__":
                         help='Maximum number of instances of IDA to run at a time (default: 10)')
     parser.add_argument('--list-only', dest='list_only', default=False, action="store_true",
                         help='List only what files would be handled without executing IDA')
-    parser.add_argument('--version', dest='ida_version', default="8.0",
-                        help='Override IDA version (e.g. "8.0"). This is used to find the path \
+    parser.add_argument('--version', dest='ida_version', default="8.1",
+                        help='Override IDA version (e.g. "8.1"). This is used to find the path \
                         of IDA on Windows.')
     parser.add_argument('--diaphora-path', dest='diaphora_path', default=None,
                         help='Specify diaphora path when --diff is used. This is used to find the diaphora_ida.py and diaphora.py scripts')
@@ -691,7 +691,8 @@ if __name__ == "__main__":
         else:
             #IDA32="C:\\Program Files (x86)\\IDA 6.95\\idaq.exe"
             #IDA32="C:\\Program Files\\IDA " + ida_version + "\\ida.exe"
-            IDA32="C:\\Program Files\\IDA Pro " + ida_version + "\\ida.exe"
+            #IDA32="C:\\Program Files\\IDA Pro " + ida_version + "\\ida.exe"
+            IDA32="C:\Program Files\IDA Core " + ida_version + "\\ida.exe"
             # XXX - Test the file exists here... We shouldn't rely on a version
             ida32_found = True
 
@@ -716,7 +717,8 @@ if __name__ == "__main__":
         else:
             #IDA64="C:\\Program Files (x86)\\IDA 6.95\\idaq64.exe"
             #IDA64="C:\\Program Files\\IDA " + ida_version + "\\ida64.exe"
-            IDA64="C:\\Program Files\\IDA Pro " + ida_version + "\\ida64.exe"
+            #IDA64="C:\\Program Files\\IDA Pro " + ida_version + "\\ida64.exe"
+            IDA64="C:\Program Files\IDA Core " + ida_version + "\\ida64.exe"
             # XXX - Test the file exists here... We shouldn't rely on a version
             ida64_found = True
 
