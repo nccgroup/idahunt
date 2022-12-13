@@ -534,12 +534,17 @@ def show_all(inputdir, filter, filename, funcname, verbose, max_ida, diaphora_pa
 
         logfile = f_noext + ".log"
 
+        name, address, address2 = None, None, None
         connection = sqlite3.connect(diaphoradb_path)
         cursor = connection.cursor()
         rows = cursor.execute(f"SELECT name, address, address2 from RESULTS WHERE type != \"best\" and name = \"{funcname}\"")
         for row in rows:
             name, address, address2 = row
             break
+
+        if not name or not address or not address2:
+            logmsg("Skipping show %s vs %s for %s due to invalid sqlite response. Check function name?" % (version, version2, funcname), debug=verbose)
+            continue
 
         env = {
             "DIAPHORA_AUTO4":"1",
