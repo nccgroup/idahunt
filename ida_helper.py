@@ -15,6 +15,7 @@ import ida_segment
 import idautils
 import idaapi
 import ida_name
+import re
 
 def logmsg(s, end=None):
     if type(s) == str:
@@ -50,6 +51,8 @@ def get_xrefs(ea = get_screen_ea()):
 # Gives the current function's name an address is part of
 def get_function_name(ea = get_screen_ea()):
     func = idaapi.get_func(ea)
+    if func is None:
+        return None
     funcname = get_func_name(func.start_ea)
     #logmsg("%X is in %s" % (ea, funcname))
     return funcname
@@ -62,6 +65,9 @@ def get_function_addr(ea = get_screen_ea()):
         return None
     return func.start_ea
 
+def rename_address(e, new_name):
+    return rename_function(e, new_name)
+
 # Renames an address with a name (and append a digit at the end if already
 # exists)
 def rename_function(e, funcname):
@@ -73,7 +79,7 @@ def rename_function(e, funcname):
     while not set_name(e, currname, SN_CHECK):
         currname = "%s_%d" % (funcname, count)
         count += 1
-        if count > 100:
+        if count > 1000:
             logmsg("Error: rename_function looped too much for 0x%d -> %s" % (e, funcname))
             return False
     return True
@@ -85,6 +91,15 @@ def unname_address(e):
         return False
     return True
 unname_function = unname_address
+
+# https://reverseengineering.stackexchange.com/questions/14725/using-ida-python-iterate-through-all-functions-and-their-instructions
+def get_functions():
+    """Return a list of functions addresses"""
+    L = []
+    for segea in idautils.Segments():
+        for funcea in idautils.Functions(segea, idc.get_segm_end(segea)):
+            L.append(funcea)
+    return L
 
 # Retrieve a list with all the idbs' segments' names
 def get_segments():
@@ -644,6 +659,164 @@ def get_call_arguments_arm(e=get_screen_ea(), count_max=10):
         count += 1
     return args
 
+# XXX - empiric, probably has internal macros in IDA
+X0_VAL = 0x81
+X1_VAL = X0_VAL+1
+X2_VAL = X0_VAL+2
+X3_VAL = X0_VAL+3
+# ... continues up until X21 like that
+ARM64_VALS = [X0_VAL, X1_VAL, X2_VAL, X3_VAL]
+ARM64_ARG_SUBVAL = X0_VAL # value to substract to get argument index
+
+# Similar to get_call_arguments_arm() but for 64-bit. See get_call_arguments_x86_1()
+# for more information.
+def get_call_arguments_arm64(e=get_screen_ea(), count_max=10, debug=False):
+    args = {}
+    cached_args = {}
+
+    # are we a BL instruction?
+    mnem = print_insn_mnem(e)
+    if mnem != "B" and mnem != "BL" and mnem != "SVC" and mnem != "BLNE" and mnem != "BLHI" and mnem != "BLEQ":
+        logmsg("Error: not a BL or SVC or BLNE or BLHI or BLEQ instruction at 0x%x" % e)
+        return None
+
+    #arg_instructions_arm64_add = ["ADD             X0, X0",
+    #                            "ADD             X1, X1",
+    #                            "ADD             X2, X2",
+    #                            "ADD             X3, X3",
+    #                            "ADD             X4, X4",
+    #                            "ADD             X5, X5",
+    #                            "ADD             X6, X6"]
+    arg_instructions_arm64_add = ["ADD             X0, X",
+                                "ADD             X1, X",
+                                "ADD             X2, X",
+                                "ADD             X3, X",
+                                "ADD             X4, X",
+                                "ADD             X5, X",
+                                "ADD             X6, X"]
+
+    # we only supports 4 arguments
+    arg_instructions_arm64_mov = ["MOV             W0,",
+                                "MOV             W1,",
+                                "MOV             W2,",
+                                "MOV             W3,",
+                                "MOV             W4,",
+                                "MOV             W5,",
+                                "MOV             W6,"]
+    arg_instructions_arm64_mov2 = ["MOV             X0,",
+                                "MOV             X1,",
+                                "MOV             X2,",
+                                "MOV             X3,",
+                                "MOV             X4,",
+                                "MOV             X5,",
+                                "MOV             X6,"]
+    # parse arguments, parsing instructions backwards
+    e = prev_head(e)
+    count = 0
+    # we only supports 10 instructions backwards looking for arguments
+    while count <= count_max:
+        disasm_line = GetDisasm(e)
+        if debug:
+            logmsg("'%s'" % disasm_line)
+        found = False
+        for i in range(len(arg_instructions_arm64_mov)):
+            #logmsg("'%s'" % arg_instructions_arm64_mov[i])
+            #logmsg("Testing index %d" % i)
+            # First arrive, first serve
+            # We suppose that the instruction closest to the call is the one giving the argument.
+            # If we encounter another instruction with "MOV reg" later with the same offset, we ignore it
+            add_instruction_list = [arg_instructions_arm64_add[i]]
+            instruction_list = [arg_instructions_arm64_mov[i],
+                                arg_instructions_arm64_mov2[i]]
+            #.text:000000000013A0EC                 ADRP            X2, #aKillallSigusr2_0@PAGE ; "'killall -SIGUSR2 mdnsd' returned with "...
+            #.text:000000000013A0F0                 ADRP            X0, #aModZp@PAGE ; "mod_zp"
+            #.text:000000000013A0F4                 ADD             X2, X2, #aKillallSigusr2_0@PAGEOFF ; "'killall -SIGUSR2 mdnsd' returned with "...
+            #.text:000000000013A0F8                 ADD             X0, X0, #aModZp@PAGEOFF ; "mod_zp"
+            #.text:000000000013A0FC                 MOV             W1, #1
+            #.text:000000000013A100                 BL              log_func
+            if any(instruction.replace(" ", "") in disasm_line.replace(" ", "") for instruction in add_instruction_list):
+                reg2 = get_operand_value(e, 1)
+                val = get_operand_value(e, 2)
+                if i not in cached_args.keys():
+                    if debug:
+                        logmsg("Cached addition = 0x%x and reg2 = 0x%x for %d" % (val, reg2, i))
+                    cached_args[i] = (reg2, val)
+                    found = True
+                    break
+                else:
+                    reg1 = get_operand_value(e, 0)
+                    # Only take into account ADD if we had another valid ADD instruction before, with the same register
+                    for (j, t) in cached_args.items():
+                        (old_reg, old_val) = t
+                        if reg1 == old_reg:
+                            if debug:
+                                logmsg("Cached addition = 0x%x and reg1 = 0x%x for %d" % (val, reg1, i))
+                            new_val = val + old_val
+                            cached_args[i] = (reg2, new_val)
+                            found = True
+                            break
+            elif any(instruction.replace(" ", "") in disasm_line.replace(" ", "") for instruction in instruction_list):
+                if i not in args.keys():
+                    args[i] = get_operand_value(e,1)
+                    if debug:
+                        logmsg("Found argument %d: 0x%x" % (i, args[i]))
+                    found = True
+                    break
+
+        # We put it outside of any register as X0...X21 can be used
+        # https://stackoverflow.com/questions/41906688/what-are-the-semantics-of-adrp-and-adrl-instructions-in-arm-assembly
+        # https://reverseengineering.stackexchange.com/questions/15418/getting-function-address-by-reading-adrp-and-add-instruction-values
+        if found is False:
+            # Remove all spaces to get rid of indentation discrepancies
+            #.text:000000000013A0EC                 ADRP            X2, #aKillallSigusr2_0@PAGE ; "'killall -SIGUSR2 mdnsd' returned with "...
+            #.text:000000000013A0F0                 ADRP            X0, #aModZp@PAGE ; "mod_zp"
+            #.text:000000000013A0F4                 ADD             X2, X2, #aKillallSigusr2_0@PAGEOFF ; "'killall -SIGUSR2 mdnsd' returned with "...
+            #.text:000000000013A0F8                 ADD             X0, X0, #aModZp@PAGEOFF ; "mod_zp"
+            #.text:000000000013A0FC                 MOV             W1, #1
+            #.text:000000000013A100                 BL              log_func
+            # or
+            #.text:00000000003F3FC4                 ADRP            X20, #aGaSp@PAGE ; "ga_sp"
+            #.text:00000000003F3FC8                 STR             XZR, [X19,#0xB8]
+            #.text:00000000003F3FCC                 ADD             X3, X3, #0x60 ; '`'
+            #.text:00000000003F3FD0                 STP             XZR, XZR, [X21,#8]
+            #.text:00000000003F3FD4                 ADD             X2, X2, #(aSSSSSSS+0x10)@PAGEOFF ; format
+            #.text:00000000003F3FD8                 ADD             X0, X20, #aGaSp@PAGEOFF ; "ga_sp"
+            #.text:00000000003F3FDC                 STRB            WZR, [X19,#0xD0]
+            #.text:00000000003F3FE0                 STRB            WZR, [X19,#0xD1]
+            #.text:00000000003F3FE4                 STRB            WZR, [X19,#0xD2]
+            #.text:00000000003F3FE8                 STR             X1, [X19,#0xD8]
+            #.text:00000000003F3FEC                 MOV             W1, #5  ; log_level
+            #.text:00000000003F3FF0                 BL              log_func
+            r = re.match("ADRP            X[0-9]+, ", disasm_line)
+            if not r:
+                r = re.match("ADRL            X[0-9]+, ", disasm_line)
+            if r:
+                reg = get_operand_value(e, 0)
+                val = get_operand_value(e, 1)
+                if debug:
+                    logmsg("adrp/adrl = 0x%x and reg = 0x%x" % (val, reg))
+                # Only take into account ADRP if we had a valid ADD instruction before
+                for (j, t) in cached_args.items():
+                    (old_reg, old_val) = t
+                    if reg == old_reg:
+                        if j not in args.keys():
+                            args[j] = val + old_val
+                            if debug:
+                                logmsg("Adjusted args[i] = 0x%x for %d" % (args[j], j))
+                            found = True
+                            break
+                if not found:
+                    i = reg-ARM64_ARG_SUBVAL
+                    if i not in args.keys():
+                        args[i] = get_operand_value(e,1)
+                        if debug:
+                            logmsg("Found argument %d: 0x%x" % (i, args[i]))
+                        found = True
+
+        e = prev_head(e)
+        count += 1
+    return args
+
 def get_call_arguments_x86(e = get_screen_ea(), count_max = 10):
     args = get_call_arguments_x86_1(e, count_max)
     if not args:
@@ -656,14 +829,17 @@ def get_call_arguments_x86(e = get_screen_ea(), count_max = 10):
 # based on internal helpers.
 def get_call_arguments(e=get_screen_ea(), count_max=10):
     if ARCHITECTURE == 32:
-        if info.procName == "ARM":
+        if info.procname == "ARM":
             args = get_call_arguments_arm(e, count_max)
         else:
             args = get_call_arguments_x86(e, count_max)
     else:
-        # XXX - we could determine if it is an ELF vs PE and call the right one
-        args = get_call_arguments_x64_linux(e, count_max)
-        #args = get_call_arguments_x64_windows(e, count_max)
+        if info.procname == "ARM":
+            args = get_call_arguments_arm64(e, count_max)
+        else:
+            # XXX - we could determine if it is an ELF vs PE and call the right one
+            args = get_call_arguments_x64_linux(e, count_max)
+            #args = get_call_arguments_x64_windows(e, count_max)
     return args
 
 # find all candidates matching a given binary data
@@ -1066,7 +1242,7 @@ def rename_logging_function(log_funcname, funcstr_helpers, simulate=False):
 # .text:000134E0                 BL              printf
 #
 # E.g. go to "000134E0" and execute:
-def rename_using_logging_function(e=get_screen_ea(), log_funcname="printf", logfunc_arg_number=1, logfunc_preprocessor=None, check_args_callback=None, simulate=False, debug=False):
+def rename_using_logging_function(e=get_screen_ea(), log_funcname="printf", logfunc_arg_number=1, logfunc_preprocessor=None, check_args_callback=None, simulate=False, debug=False, check_target_funcname=None, modify_funcname=None):
     """Rename a function assuming a logging function is being called
     
     :param e: address where the call/jmp/bl/etc. instruction is
@@ -1082,6 +1258,11 @@ def rename_using_logging_function(e=get_screen_ea(), log_funcname="printf", logf
                                 as returned by get_call_arguments()
     :param simulate: True if you just want to simulate instead of actually renaming. False by default.
     :param debug: set to True if you want to see more logs while debugging
+    :param check_target_funcname: None means only rename functions if starting with "sub_", otherwise callback to implement 
+                                  the condition to rename or not. This function takes a single argument: the original function name
+    :param modify_funcname: None means don't modify the function name based on original function name. Otherwise callback to implement the code
+                            to generate the new function name based on 2 arguments: the function name retried from the logging function argument 
+                            and the old function name (this is useful when the functions are parts of modules that we want to keep in the function name)
     :return: None
     """
 
@@ -1099,7 +1280,13 @@ def rename_using_logging_function(e=get_screen_ea(), log_funcname="printf", logf
             return False
         current_func_addr = func.start_ea
         current_func_name = get_func_name(current_func_addr)
-        if not current_func_name.startswith("sub_"):
+        do_rename = False
+        if check_target_funcname is None:
+            if current_func_name.startswith("sub_"):
+                do_rename = True
+        else:
+            do_rename = check_target_funcname(current_func_name)
+        if not do_rename:
             return False # was previously renamed
     
     # parse arguments, parsing instructions backwards
@@ -1141,7 +1328,14 @@ def rename_using_logging_function(e=get_screen_ea(), log_funcname="printf", logf
         return False
     current_func_addr = func.start_ea
     current_func_name = get_func_name(current_func_addr)
-    if current_func_name.startswith("sub_"):
+    if check_target_funcname is None:
+        if current_func_name.startswith("sub_"):
+            do_rename = True
+    else:
+        do_rename = check_target_funcname(current_func_name)
+    if modify_funcname is not None:
+        funcname = modify_funcname(current_func_name, funcname)
+    if do_rename:
         logmsg("0x%x -> %s" % (current_func_addr, funcname))
         if not simulate:
             if not rename_function(current_func_addr, funcname):
@@ -1152,11 +1346,11 @@ def rename_using_logging_function(e=get_screen_ea(), log_funcname="printf", logf
 
     return True
 
-def rename_functions_using_logging_function(log_funcname, logfunc_arg_number, logfunc_preprocessor=None, check_args_callback=None, simulate=False, debug=False):
+def rename_functions_using_logging_function(log_funcname, logfunc_arg_number, logfunc_preprocessor=None, check_args_callback=None, simulate=False, debug=False, check_target_funcname=None, modify_funcname=None):
     """Rename all the functions assuming a logging function is being called
     
     :param log_funcname: string for the function's name that is logging
-    :param logfunc_arg_number: index to the argument number (starts at 0 as is indexing in an array)
+    :param logfunc_arg_number: index to the argument number (starts at 0 as is indexing in an array) where there is the function name to retrieve (exact value or part of it)
     :param logfunc_preprocessor: If not None, function to call and passing logfunc_arg_number argument to get the
                                  real function name. E.g. if we have a logging function like 
                                  perror("func_name: error xxx\n"), we want to retrieve what is before 
@@ -1166,6 +1360,11 @@ def rename_functions_using_logging_function(log_funcname, logfunc_arg_number, lo
                                 This function takes a single argument: the dictionary of arguments 
                                 as returned by get_call_arguments()
     :param simulate: True if you just want to simulate instead of actually renaming. False by default.
+    :param check_target_funcname: None means only rename functions if starting with "sub_", otherwise callback to implement 
+                                  the condition to rename or not. This function takes a single argument: the original function name
+    :param modify_funcname: None means don't modify the function name based on original function name. Otherwise callback to implement the code
+                            to generate the new function name based on 2 arguments: the function name retried from the logging function argument 
+                            and the old function name (this is useful when the functions are parts of modules that we want to keep in the function name)
     :return: -1 if the logging function name was not found. The number of renamed functions otherwise
     """
 
@@ -1177,10 +1376,9 @@ def rename_functions_using_logging_function(log_funcname, logfunc_arg_number, lo
         logmsg("ERROR: you need to find %s first. Use rename_using_logging_function() first or find it manually by searching for strings that look like function names" % log_funcname)
         return -1
     for e in get_xrefs(my_log_addr):
-        #logmsg("0x%x" % e)
         # we don't check for return values because we better rename as many functions as possible
         # even if one failed e.g. because code was defined by not as a function.
-        if rename_using_logging_function(e, log_funcname=log_funcname, logfunc_arg_number=logfunc_arg_number, logfunc_preprocessor=logfunc_preprocessor, check_args_callback=check_args_callback, simulate=simulate, debug=debug):
+        if rename_using_logging_function(e, log_funcname=log_funcname, logfunc_arg_number=logfunc_arg_number, logfunc_preprocessor=logfunc_preprocessor, check_args_callback=check_args_callback, simulate=simulate, debug=debug, check_target_funcname=check_target_funcname, modify_funcname=modify_funcname):
             count += 1
 
     logmsg("Renamed %d functions" % count)
