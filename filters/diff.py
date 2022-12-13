@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 #
 # This file is part of idahunt.
-# Copyright (c) 2017, Aaron Adams <aaron.adams(at)nccgroup(dot)trust>
-# Copyright (c) 2017, Cedric Halbronn <cedric.halbronn(at)nccgroup(dot)trust>
+# Copyright (c) 2022, Aaron Adams <aaron.adams(at)nccgroup(dot)trust>
+# Copyright (c) 2022, Cedric Halbronn <cedric.halbronn(at)nccgroup(dot)trust>
 #
 # Filter for diffing with diaphora to be used by idahunt.py command line:
 # e.g. idahunt.py --filter "filters/diff.py -n ntdll.dll"
