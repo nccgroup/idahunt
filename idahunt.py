@@ -547,7 +547,7 @@ def show_all(inputdir, filter, filename, funcname, verbose, max_ida, diaphora_pa
             continue
 
         env = {
-            "DIAPHORA_AUTO4":"1",
+            "DIAPHORA_AUTO_HTML":"1",
             "DIAPHORA_DB1":str(sqlitedb_path),
             "DIAPHORA_DB2":str(sqlitedb2_path),
             "DIAPHORA_DIFF":str(diaphoradb_path),
@@ -790,7 +790,8 @@ if __name__ == "__main__":
         logmsg("EXECUTE DIFF-EXPORT")
         script = os.path.join(args.diaphora_path, "diaphora_ida.py")
         env = {
-            "DIAPHORA_AUTO2": "1",
+            "DIAPHORA_AUTO": "1",
+            "DIAPHORA_USE_DECOMPILER": "1",
             "DIAPHORA_EXPORT_FILE": "%%FILE%%.sqlite",
         }
         filter_ = f"filters\\diff.py -n {args.filename}"
