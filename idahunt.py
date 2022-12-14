@@ -808,6 +808,8 @@ if __name__ == "__main__":
         show_all(args.inputdir, filter_, args.filename, args.funcname, args.verbose, args.max_ida, args.diaphora_path, list_only=args.list_only)
 
     if args.diff or args.html:
+        end_time = time.time()
+        logmsg("Took {} to execute this".format(hms_string(end_time - start_time)))
         sys.exit(0)
 
     if args.analyse:
@@ -833,6 +835,8 @@ if __name__ == "__main__":
         logmsg("OPENING FILES")
         do_dir(args.inputdir, args.filter, args.verbose, max_ida=args.max_ida,
                do_file=open_file, list_only=args.list_only, ida_args=ida_args)
+        end_time = time.time()
+        logmsg("Took {} to execute this".format(hms_string(end_time - start_time)))
         sys.exit()
 
     end_time = time.time()
