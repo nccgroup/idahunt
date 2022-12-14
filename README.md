@@ -1,17 +1,25 @@
 ![](img/banner.png)
 
 <!-- vim-markdown-toc GFM -->
+
 * [Overview](#overview)
-  * [Requirements](#requirements)
-  * [Features](#features)
-  * [Scripting](#scripting)
+    * [Requirements](#requirements)
+    * [Features](#features)
+    * [Scripting](#scripting)
 * [Usage](#usage)
-  * [Simulate without executing](#simulate-without-executing)
-  * [Initial analysis](#initial-analysis)
-  * [Execute IDA Python script](#execute-ida-python-script)
-  * [Filters](#filters)
-    * [Architecture detection](#architecture-detection)
+    * [Simulate without executing](#simulate-without-executing)
+    * [Initial analysis](#initial-analysis)
+    * [Execute IDA Python script](#execute-ida-python-script)
+    * [Binary diffing](#binary-diffing)
+        * [Requirements](#requirements-1)
+        * [Initial analysis](#initial-analysis-1)
+        * [Diffing files](#diffing-files)
+        * [Diffing a function](#diffing-a-function)
+    * [Filters](#filters)
+        * [Architecture detection](#architecture-detection)
+        * [Target-specific](#target-specific)
 * [Known projects using idahunt](#known-projects-using-idahunt)
+
 <!-- vim-markdown-toc -->
 
 # Overview
@@ -186,6 +194,180 @@ Executing function 'main'...
 [script_template] I execute in IDA, yay!
 ```
 
+## Binary diffing
+
+idahunt integrates beautifully with [diaphora](https://github.com/joxeankoret/diaphora) for doing binary diffing. Atm we rely on this [fork](https://github.com/saidelike/diaphora/) but hopefully these changes will be integrated into the main repository.
+
+### Requirements
+
+You need a hierarchy of folders with the different versions of the same filename, e.g.:
+
+```
+C:\> tree C:\tests\ /F
+C:\tests
+├───patch
+│       tm.sys
+│
+└───vuln
+        tm.sys
+```
+
+### Initial analysis
+
+If not already done, you need to do the initial IDA analysis to create the idbs.
+
+```
+C:\idahunt> python idahunt.py --inputdir C:\tests\ --analyse --verbose
+[idahunt] IDA32 = C:\Program Files\IDA Core 8.1\ida.exe
+[idahunt] IDA64 = C:\Program Files\IDA Core 8.1\ida64.exe
+[idahunt] ANALYSING FILES
+[idahunt] Analysing C:\tests\patch\tm.sys
+[idahunt] C:\Program Files\IDA Core 8.1\ida64.exe -B -oC:\tests\patch\tm.i64 -LC:\tests\patch\tm.log C:\tests\patch\tm.sys
+[idahunt] Analysing C:\tests\vuln\tm.sys
+[idahunt] C:\Program Files\IDA Core 8.1\ida64.exe -B -oC:\tests\vuln\tm.i64 -LC:\tests\vuln\tm.log C:\tests\vuln\tm.sys
+[idahunt] Executed IDA 2/2 times IDA instances
+[idahunt] Took 0:00:15.03 to execute this
+```
+
+```
+C:\> tree C:\tests\ /F
+C:\tests
+├───patch
+│       tm.i64
+│       tm.log
+│       tm.sys
+│
+└───vuln
+        tm.i64
+        tm.log
+        tm.sys
+```
+
+### Diffing files
+
+This uses diaphora to do the diff export for each file (creating the `<filename>.sqlite` sqlite3 database), and then the diff between versions (creating the `<filename>.diaphora` sqlite3 database).
+
+```
+C:\idahunt> python idahunt.py --diaphora-path C:\diaphora --inputdir C:\tests --diff --filename tm.sys --verbose
+[idahunt] IDA32 = C:\Program Files\IDA Core 8.1\ida.exe
+[idahunt] IDA64 = C:\Program Files\IDA Core 8.1\ida64.exe
+[idahunt] EXECUTE DIFF-EXPORT
+[idahunt] Executing script C:\diaphora\diaphora_ida.py for C:\tests\patch\tm.sys
+[idahunt] C:\Program Files\IDA Core 8.1\ida64.exe -A -SC:\diaphora\diaphora_ida.py -LC:\tests\patch\tm.log C:\tests\patch\tm.i64
+[idahunt] Environment variables:
+[idahunt] DIAPHORA_AUTO2=1
+[idahunt] DIAPHORA_EXPORT_FILE=tm.sqlite
+[idahunt] Executing script C:\diaphora\diaphora_ida.py for C:\tests\vuln\tm.sys
+[idahunt] C:\Program Files\IDA Core 8.1\ida64.exe -A -SC:\diaphora\diaphora_ida.py -LC:\tests\vuln\tm.log C:\tests\vuln\tm.i64
+[idahunt] Environment variables:
+[idahunt] DIAPHORA_AUTO2=1
+[idahunt] DIAPHORA_EXPORT_FILE=tm.sqlite
+[idahunt] Executed IDA 2/2 times IDA instances
+[idahunt] EXECUTE DIFF
+[idahunt] Diffing patch vs vuln
+[idahunt] C:\Program Files\Python39\python.exe C:\diaphora\diaphora.py C:\tests\patch\tm.sqlite C:\tests\vuln\tm.sqlite -o C:\tests\vuln\patch_vs_vuln\tm.sys.diaphora
+[diaphora][Wed Dec 14 10:33:49 2022] Diffing...es
+[diaphora][Wed Dec 14 10:33:49 2022] Callgraphs from both programs differ in 0.706714%
+[diaphora][Wed Dec 14 10:33:49 2022] Finding best matches...
+[diaphora][Wed Dec 14 10:33:49 2022] Finding with heuristic 'Perfect match, same name'
+[diaphora][Wed Dec 14 10:33:50 2022] All functions matched in at least one database, finishing.
+[diaphora][Wed Dec 14 10:33:50 2022] Finding partial matches
+[diaphora][Wed Dec 14 10:33:50 2022] All functions matched in at least one database, finishing.
+[diaphora][Wed Dec 14 10:33:50 2022] Finding with heuristic 'Small names difference'
+[diaphora][Wed Dec 14 10:33:50 2022] Finding with heuristic 'Call address sequence'
+[diaphora][Wed Dec 14 10:33:50 2022] Finding with heuristic 'Call address sequence'
+[diaphora][Wed Dec 14 10:33:50 2022] Finding unmatched functions
+[diaphora][Wed Dec 14 10:33:50 2022] Done. Took 1.110000000000582 seconds.
+[diaphora][Wed Dec 14 10:33:50 2022] Diffing results saved in file 'C:\tests\vuln\patch_vs_vuln\tm.sys.diaphora'.
+[idahunt] Executed Python 1/1 times
+[idahunt] Took 0:00:30.07 to execute this
+```
+
+```
+C:\> tree C:\tests\ /F
+C:\tests
+├───patch
+│       tm.i64
+│       tm.log
+│       tm.sqlite
+│       tm.sys
+│
+└───vuln
+    │   tm.i64
+    │   tm.log
+    │   tm.sqlite
+    │   tm.sys
+    │
+    └───patch_vs_vuln
+            tm.sys.diaphora
+            tm.sys.txt
+```
+
+As shown above, it also creates a `<filename>.txt` file along the `<filename>.diaphora` file with the list of best matches:
+
+```
+partial,00000,1c0002708,WPP_SF_DDq,1c0002708,WPP_SF_DDq,0.950,1,1,Perfect match, same name
+partial,00001,1c0002770,WPP_SF_Dq,1c0002770,WPP_SF_Dq,0.940,1,1,Perfect match, same name
+partial,00002,1c00027c8,WPP_SF_qq_guid_D,1c00027c8,WPP_SF_qq_guid_D,0.960,1,1,Perfect match, same name
+partial,00003,1c0002844,WPP_SF_qqi,1c0002844,WPP_SF_qqi,0.950,1,1,Perfect match, same name
+partial,00004,1c00028a8,WPP_SF_qqii,1c00028a8,WPP_SF_qqii,0.960,1,1,Perfect match, same name
+partial,00005,1c0015500,TmRecoverResourceManagerExt,1c0015500,TmRecoverResourceManagerExt,0.860,37,36,Perfect match, same name
+partial,00006,1c001a610,TmpHeuristicAbortTransaction,1c001a640,TmpHeuristicAbortTransaction,0.986,6,6,Perfect match, same name
+partial,00007,1c001a6c0,TmpHeuristicAbortTransactionAfterCheckpoint,1c001a6f0,TmpHeuristicAbortTransactionAfterCheckpoint,0.992,11,11,Perfect match, same name
+partial,00008,1c001ad58,TmpIsClusteredTransactionManager,1c001ad88,TmpIsClusteredTransactionManager,0.994,15,15,Perfect match, same name
+partial,00009,1c001b0c0,TmpMigrateEnlistments,1c001b0f0,TmpMigrateEnlistments,0.980,10,10,Perfect match, same name
+```
+
+### Diffing a function
+
+It turns out the `tm.sys` files (provided in the repo) are related to [CVE-2018-8611](https://research.nccgroup.com/2020/04/27/cve-2018-8611-exploiting-windows-ktm-part-1-5-introduction/) so let's analyse the patched function `TmRecoverResourceManagerExt()`:
+
+```
+C:\idahunt> python idahunt.py --diaphora-path C:\diaphora\ --inputdir C:\tests\ --html --filename tm.sys --funcname TmRecoverResourceManagerExt --verbose
+[idahunt] IDA32 = C:\Program Files\IDA Core 8.1\ida.exe
+[idahunt] IDA64 = C:\Program Files\IDA Core 8.1\ida64.exe
+[idahunt] EXECUTE GENERATE HTML
+C:\tests\patch\tm.sqlite C:\tests\vuln\tm.sqlite
+C:\tests\vuln\patch_vs_vuln\tm.sys\TmRecoverResourceManagerExt_asm.html C:\tests\vuln\patch_vs_vuln\tm.sys\TmRecoverResourceManagerExt_pseudo.html
+[idahunt] Showing patch vs vuln for TmRecoverResourceManagerExt
+[idahunt] C:\Program Files\IDA Core 8.1\ida64.exe -A -SC:\diaphora\diaphora_ida.py -LC:\tests\patch\tm.log C:\tests\patch\tm.i64
+[idahunt] Environment variables:
+[idahunt] DIAPHORA_AUTO4=1
+[idahunt] DIAPHORA_DB1=C:\tests\patch\tm.sqlite
+[idahunt] DIAPHORA_DB2=C:\tests\vuln\tm.sqlite
+[idahunt] DIAPHORA_DIFF=C:\tests\vuln\patch_vs_vuln\tm.sys.diaphora
+[idahunt] DIAPHORA_EA1=1c0015500
+[idahunt] DIAPHORA_EA2=1c0015500
+[idahunt] DIAPHORA_HTML_ASM=C:\tests\vuln\patch_vs_vuln\tm.sys\TmRecoverResourceManagerExt_asm.html
+[idahunt] DIAPHORA_HTML_PSEUDO=C:\tests\vuln\patch_vs_vuln\tm.sys\TmRecoverResourceManagerExt_pseudo.html
+[idahunt] Executed IDA 1/1 times IDA instances
+[idahunt] Took 0:00:10.03 to execute this
+```
+
+Now we have generated assembly and decompiled code for this function:
+
+```
+C:\idahunt> tree C:\tests\ /F
+C:\tests
+├───patch
+│       tm.i64
+│       ...
+│
+└───vuln
+    │   tm.i64
+    │   ...
+    │
+    └───patch_vs_vuln
+        │   tm.sys.diaphora
+        │   tm.sys.txt
+        │
+        └───tm.sys
+                TmRecoverResourceManagerExt_asm.html
+                TmRecoverResourceManagerExt_pseudo.html
+```
+
+![](img/TmRecoverResourceManagerExt.png)
+
 ## Filters
 
 We can filter that idahunt only analyses files with a given pattern in the name
@@ -237,6 +419,10 @@ C:\idahunt>idahunt.py --inputdir C:\re --filter "filters\names.py -v -e dll" --s
 [names] Skipping non-matching extension .dll in DownloadExecute.exe
 [names] Skipping non-matching extension .dll in ReverseShell.exe
 ```
+
+### Target-specific
+
+There are filters for analyzing HP iLO or Cisco ASA firmware.
 
 # Known projects using idahunt
 
