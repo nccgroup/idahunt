@@ -196,7 +196,7 @@ Executing function 'main'...
 
 ## Binary diffing
 
-idahunt integrates beautifully with [diaphora](https://github.com/joxeankoret/diaphora) for doing binary diffing. Atm we rely on this [fork](https://github.com/saidelike/diaphora/) but hopefully these changes will be integrated into the main repository.
+idahunt integrates beautifully with [diaphora](https://github.com/joxeankoret/diaphora) for doing binary diffing since this [PR](https://github.com/joxeankoret/diaphora/pull/246).
 
 ### Requirements
 
