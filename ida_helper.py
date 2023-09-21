@@ -214,13 +214,6 @@ def last_xref(addr):
         logmsg("Error: last_xref: Failed to find xref for 0x%x" % addr)
     return frm
 
-# Rename a function
-def rename_address(e, funcname):
-    if not set_name(e, funcname, SN_CHECK):
-        logmsg("Error: rename_address: Impossible to rename 0x%x with %s" % (e, funcname))
-        return None
-    return "OK"
-
 # Find a series of bytes
 # e.g. with byteStr = JMP_ESP = '\xff\xe4'
 def find_gadget(byteStr):
